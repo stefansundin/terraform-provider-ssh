@@ -112,6 +112,12 @@ func dataSourceSSHTunnelRead(d *schema.ResourceData, meta interface{}) error {
 			panic(err)
 		}
 
+		effectiveAddress := localListener.Addr().String()
+		if effectiveAddress != localAddress {
+			log.Printf("[DEBUG] localAddress: %v", effectiveAddress)
+			d.Set("local_address", effectiveAddress)
+		}
+
 		go func() {
 			sshClientConn, err := ssh.Dial("tcp", host, sshConf)
 			if err != nil {
