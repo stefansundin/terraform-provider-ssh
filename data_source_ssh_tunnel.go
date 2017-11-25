@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"strings"
 
 	"github.com/hashicorp/terraform/helper/schema"
 	"golang.org/x/crypto/ssh"
@@ -79,6 +80,11 @@ func dataSourceSSHTunnelRead(d *schema.ResourceData, meta interface{}) error {
 	localAddress := d.Get("local_address").(string)
 	remoteAddress := d.Get("remote_address").(string)
 	tunnelEstablished := d.Get("tunnel_established").(bool)
+
+	// default to port 22 if not specified
+	if !strings.Contains(host, ":") {
+		host = host + ":22"
+	}
 
 	log.Printf("[DEBUG] user: %v", user)
 	log.Printf("[DEBUG] host: %v", host)
