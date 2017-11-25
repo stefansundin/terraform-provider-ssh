@@ -41,6 +41,10 @@ func dataSourceSSHTunnel() *schema.Resource {
 				Required:    true,
 				Description: "The remote bind address (e.g. localhost:8500)",
 			},
+			"port": {
+				Type:     schema.TypeString,
+				Computed: true,
+			},
 			"tunnel_established": {
 				// Probably not the proper way to store this
 				Type:     schema.TypeBool,
@@ -117,6 +121,11 @@ func dataSourceSSHTunnelRead(d *schema.ResourceData, meta interface{}) error {
 			log.Printf("[DEBUG] localAddress: %v", effectiveAddress)
 			d.Set("local_address", effectiveAddress)
 		}
+
+		lastColon := strings.LastIndex(effectiveAddress, ":")
+		port := effectiveAddress[lastColon+1 : len(effectiveAddress)]
+		log.Printf("[DEBUG] port: %v", port)
+		d.Set("port", port)
 
 		go func() {
 			sshClientConn, err := ssh.Dial("tcp", host, sshConf)

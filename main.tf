@@ -22,6 +22,9 @@ data "consul_keys" "keys" {
 output "local_address" {
   value = "${data.ssh_tunnel.consul.local_address}"
 }
+output "random_port" {
+  value = "${data.ssh_tunnel.consul.port}"
+}
 output "revision" {
   value = "${data.consul_keys.keys.var.revision}"
 }
