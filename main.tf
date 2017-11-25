@@ -1,3 +1,5 @@
+provider "ssh" {}
+
 data "ssh_tunnel" "consul" {
   user            = "stefan"
   host            = "bastion.example.com"
