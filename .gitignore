@@ -7,3 +7,4 @@ terraform.d
 *.tfplan
 terraform-open-ssh-tunnels/terraform-open-ssh-tunnels
 /terraform-open-ssh-tunnels_*
+/release
