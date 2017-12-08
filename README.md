@@ -29,6 +29,12 @@ rm terraform-provider-ssh_v0.0.2_darwin_amd64.zip
 terraform init
 ```
 
+#### Applying an output file
+
+Note that there is a gotcha when trying to apply a generated plan output file (see [issue #1](https://github.com/stefansundin/terraform-provider-ssh/issues/1)). In this case, the SSH tunnels will not be automatically opened.
+
+As a workaround, before you apply, run the companion program `terraform-open-ssh-tunnels` on the plan file first in order to reopen the SSH tunnels. [Download from the releases.](https://github.com/stefansundin/terraform-provider-ssh/releases/latest)
+
 #### TODO
 
 - Support another hop (ProxyJump-like behavior)
