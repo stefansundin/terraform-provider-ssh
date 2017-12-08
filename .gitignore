@@ -4,3 +4,6 @@ terraform.d
 .terraform
 *.tfstate
 *.tfstate.backup
+*.tfplan
+terraform-open-ssh-tunnels/terraform-open-ssh-tunnels
+/terraform-open-ssh-tunnels_*
