@@ -88,6 +88,7 @@ func dataSourceSSHTunnelRead(d *schema.ResourceData, meta interface{}) error {
 	// default to port 22 if not specified
 	if !strings.Contains(host, ":") {
 		host = host + ":22"
+		d.Set("host", host)
 	}
 
 	log.Printf("[DEBUG] user: %v", user)
