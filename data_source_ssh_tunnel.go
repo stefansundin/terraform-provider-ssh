@@ -3,13 +3,14 @@ package main
 import (
 	"encoding/pem"
 	"fmt"
+	"github.com/hashicorp/terraform/helper/schema"
+	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/agent"
 	"io"
 	"log"
 	"net"
+	"os"
 	"strings"
-
-	"github.com/hashicorp/terraform/helper/schema"
-	"golang.org/x/crypto/ssh"
 )
 
 func dataSourceSSHTunnel() *schema.Resource {
@@ -26,10 +27,17 @@ func dataSourceSSHTunnel() *schema.Resource {
 				Required:    true,
 				Description: "The hostname",
 			},
+			"ssh_agent": &schema.Schema{
+				Type:        schema.TypeBool,
+				Optional:    true,
+				Description: "use ssh agent",
+				Default:     false,
+			},
 			"private_key": &schema.Schema{
 				Type:        schema.TypeString,
-				Required:    true,
+				Optional:    true,
 				Description: "The private SSH key",
+				Default:     "~/.ssh/id_rsa",
 			},
 			"local_address": &schema.Schema{
 				Type:        schema.TypeString,
@@ -77,6 +85,53 @@ func readPrivateKey(pk string) (ssh.AuthMethod, error) {
 	return ssh.PublicKeys(signer), nil
 }
 
+func agentAuth() ssh.AuthMethod {
+	sshAuthSock := os.Getenv("SSH_AUTH_SOCK")
+	log.Printf("[INFO] opening connection to %q", sshAuthSock)
+	conn, err := net.Dial("unix", sshAuthSock)
+	log.Print("[INFO] connection open ")
+	if err != nil {
+		panic(err)
+	}
+	agentClient := agent.NewClient(conn)
+	return ssh.PublicKeysCallback(agentClient.Signers)
+}
+
+func copyConn(writer, reader net.Conn) {
+	_, err := io.Copy(writer, reader)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func forward(d *schema.ResourceData, host, remoteAddress string, localListener net.Listener, sshConf *ssh.ClientConfig) {
+	sshClientConn, err := ssh.Dial("tcp", host, sshConf)
+	if err != nil {
+		panic(err)
+	}
+	err = d.Set("tunnel_established", true)
+	if err != nil {
+		panic(err)
+	}
+
+	// The accept loop
+	for {
+		localConn, err := localListener.Accept()
+		if err != nil {
+			panic(err)
+		}
+
+		sshConn, err := sshClientConn.Dial("tcp", remoteAddress)
+		if err != nil {
+			panic(err)
+		}
+
+		go copyConn(sshConn, localConn)
+
+		go copyConn(localConn, sshConn)
+	}
+}
+
 func dataSourceSSHTunnelRead(d *schema.ResourceData, meta interface{}) error {
 	user := d.Get("user").(string)
 	host := d.Get("host").(string)
@@ -84,11 +139,15 @@ func dataSourceSSHTunnelRead(d *schema.ResourceData, meta interface{}) error {
 	localAddress := d.Get("local_address").(string)
 	remoteAddress := d.Get("remote_address").(string)
 	tunnelEstablished := d.Get("tunnel_established").(bool)
+	sshAgent := d.Get("ssh_agent").(bool)
 
 	// default to port 22 if not specified
 	if !strings.Contains(host, ":") {
 		host = host + ":22"
-		d.Set("host", host)
+		err := d.Set("host", host)
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	log.Printf("[DEBUG] user: %v", user)
@@ -98,7 +157,6 @@ func dataSourceSSHTunnelRead(d *schema.ResourceData, meta interface{}) error {
 	log.Printf("[DEBUG] tunnelEstablished: %v", tunnelEstablished)
 
 	if tunnelEstablished == false {
-		d.Set("tunnel_established", true)
 
 		sshConf := &ssh.ClientConfig{
 			User:            user,
@@ -106,11 +164,15 @@ func dataSourceSSHTunnelRead(d *schema.ResourceData, meta interface{}) error {
 			Auth:            []ssh.AuthMethod{},
 		}
 
-		pubKeyAuth, err := readPrivateKey(privateKey)
-		if err != nil {
-			panic(err)
+		if sshAgent {
+			sshConf.Auth = append(sshConf.Auth, agentAuth())
+		} else {
+			pubKeyAuth, err := readPrivateKey(privateKey)
+			if err != nil {
+				panic(err)
+			}
+			sshConf.Auth = append(sshConf.Auth, pubKeyAuth)
 		}
-		sshConf.Auth = append(sshConf.Auth, pubKeyAuth)
 
 		localListener, err := net.Listen("tcp", localAddress)
 		if err != nil {
@@ -120,49 +182,22 @@ func dataSourceSSHTunnelRead(d *schema.ResourceData, meta interface{}) error {
 		effectiveAddress := localListener.Addr().String()
 		if effectiveAddress != localAddress {
 			log.Printf("[DEBUG] localAddress: %v", effectiveAddress)
-			d.Set("local_address", effectiveAddress)
+			err = d.Set("local_address", effectiveAddress)
+			if err != nil {
+				panic(err)
+			}
 		}
 
 		lastColon := strings.LastIndex(effectiveAddress, ":")
 		port := effectiveAddress[lastColon+1 : len(effectiveAddress)]
 		log.Printf("[DEBUG] port: %v", port)
-		d.Set("port", port)
+		err = d.Set("port", port)
+		if err != nil {
+			panic(err)
+		}
 
-		go func() {
-			sshClientConn, err := ssh.Dial("tcp", host, sshConf)
-			if err != nil {
-				panic(err)
-			}
+		go forward(d, host, remoteAddress, localListener, sshConf)
 
-			// The accept loop
-			for {
-				localConn, err := localListener.Accept()
-				if err != nil {
-					panic(err)
-				}
-
-				sshConn, err := sshClientConn.Dial("tcp", remoteAddress)
-				if err != nil {
-					panic(err)
-				}
-
-				// Send traffic from the SSH server -> local program
-				go func() {
-					_, err = io.Copy(sshConn, localConn)
-					if err != nil {
-						panic(err)
-					}
-				}()
-
-				// Send traffic from the local program -> SSH server
-				go func() {
-					_, err = io.Copy(localConn, sshConn)
-					if err != nil {
-						panic(err)
-					}
-				}()
-			}
-		}()
 	}
 	d.SetId(localAddress)
 
