@@ -96,42 +96,6 @@ func agentAuth() (ssh.AuthMethod, error) {
 	return ssh.PublicKeysCallback(agentClient.Signers), nil
 }
 
-func copyConn(writer, reader net.Conn) {
-	_, err := io.Copy(writer, reader)
-	if err != nil {
-		panic(err)
-	}
-}
-
-func forward(d *schema.ResourceData, host, remoteAddress string, localListener net.Listener, sshConf *ssh.ClientConfig) {
-	sshClientConn, err := ssh.Dial("tcp", host, sshConf)
-	if err != nil {
-		panic(err)
-	}
-	err = d.Set("tunnel_established", true)
-	if err != nil {
-		panic(err)
-	}
-
-	// The accept loop
-	for {
-		localConn, err := localListener.Accept()
-		if err != nil {
-			panic(err)
-		}
-
-		sshConn, err := sshClientConn.Dial("tcp", remoteAddress)
-		if err != nil {
-			panic(err)
-		}
-
-		go copyConn(sshConn, localConn)
-
-		go copyConn(localConn, sshConn)
-	}
-}
-
-
 func dataSourceSSHTunnelRead(d *schema.ResourceData, meta interface{}) error {
 	user := d.Get("user").(string)
 	host := d.Get("host").(string)
@@ -207,7 +171,45 @@ func dataSourceSSHTunnelRead(d *schema.ResourceData, meta interface{}) error {
 			return fmt.Errorf("could not set local port, %v", err)
 		}
 
-		go forward(d, host, remoteAddress, localListener, sshConf)
+		go func() {
+			sshClientConn, err := ssh.Dial("tcp", host, sshConf)
+			if err != nil {
+				panic(err)
+			}
+			err = d.Set("tunnel_established", true)
+			if err != nil {
+				panic(err)
+			}
+
+			// The accept loop
+			for {
+				localConn, err := localListener.Accept()
+				if err != nil {
+					panic(err)
+				}
+
+				sshConn, err := sshClientConn.Dial("tcp", remoteAddress)
+				if err != nil {
+					panic(err)
+				}
+
+				// Send traffic from the SSH server -> local program
+				go func() {
+					_, err = io.Copy(sshConn, localConn)
+					if err != nil {
+						panic(err)
+					}
+				}()
+
+				// Send traffic from the local program -> SSH server
+				go func() {
+					_, err = io.Copy(localConn, sshConn)
+					if err != nil {
+						panic(err)
+					}
+				}()
+			}
+		}()
 
 	}
 	d.SetId(localAddress)
