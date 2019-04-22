@@ -35,7 +35,3 @@ windows:
 clean:
 	rm -rf release
 	rm -f terraform-provider-ssh terraform-provider-ssh.exe terraform-open-ssh-tunnels/terraform-open-ssh-tunnels terraform-open-ssh-tunnels/terraform-open-ssh-tunnels.exe terraform-provider-ssh_${VERSION} terraform-provider-ssh_${VERSION}.exe
-
-debug:
-	go build $(LDFLAGS) -o terraform-provider-ssh_${VERSION}
-	cp terraform-provider-ssh_${VERSION} ~/.terraform.d/plugins
