@@ -31,13 +31,12 @@ func dataSourceSSHTunnel() *schema.Resource {
 				Type:        schema.TypeBool,
 				Optional:    true,
 				Description: "use ssh agent",
-				Default:     false,
+				Default:     true,
 			},
 			"private_key": &schema.Schema{
 				Type:        schema.TypeString,
 				Optional:    true,
-				Description: "The private SSH key",
-				Default:     "~/.ssh/id_rsa",
+				Description: "SSH private key",
 			},
 			"local_address": &schema.Schema{
 				Type:        schema.TypeString,
@@ -132,10 +131,11 @@ func forward(d *schema.ResourceData, host, remoteAddress string, localListener n
 	}
 }
 
+
 func dataSourceSSHTunnelRead(d *schema.ResourceData, meta interface{}) error {
 	user := d.Get("user").(string)
 	host := d.Get("host").(string)
-	privateKey := d.Get("private_key").(string)
+	privateKey := d.Get("private_key_path").(string)
 	localAddress := d.Get("local_address").(string)
 	remoteAddress := d.Get("remote_address").(string)
 	tunnelEstablished := d.Get("tunnel_established").(bool)
@@ -164,14 +164,21 @@ func dataSourceSSHTunnelRead(d *schema.ResourceData, meta interface{}) error {
 			Auth:            []ssh.AuthMethod{},
 		}
 
-		if sshAgent {
-			sshConf.Auth = append(sshConf.Auth, agentAuth())
-		} else {
+		if (os.Getenv("SSH_AUTH_SOCK") == "" && sshAgent) || (!sshAgent && privateKey == "") {
+			return fmt.Errorf("Either ssh-agent or a private key must be set.")
+		}
+
+		if privateKey != "" {
 			pubKeyAuth, err := readPrivateKey(privateKey)
-			if err != nil {
-				panic(err)
+			if err == nil {
+				sshConf.Auth = append(sshConf.Auth, pubKeyAuth)
+			} else {
+				log.Printf("[INFO] Could not read private key, proceed with ssh-agent: %v", err)
 			}
-			sshConf.Auth = append(sshConf.Auth, pubKeyAuth)
+		}
+
+		if os.Getenv("SSH_AUTH_SOCK") != "" && sshAgent {
+			sshConf.Auth = append(sshConf.Auth, agentAuth())
 		}
 
 		localListener, err := net.Listen("tcp", localAddress)
