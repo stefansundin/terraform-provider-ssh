@@ -84,16 +84,16 @@ func readPrivateKey(pk string) (ssh.AuthMethod, error) {
 	return ssh.PublicKeys(signer), nil
 }
 
-func agentAuth() ssh.AuthMethod {
+func agentAuth() (ssh.AuthMethod, error) {
 	sshAuthSock := os.Getenv("SSH_AUTH_SOCK")
 	log.Printf("[INFO] opening connection to %q", sshAuthSock)
 	conn, err := net.Dial("unix", sshAuthSock)
 	log.Print("[INFO] connection open ")
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("could not dial with socket, %v", err)
 	}
 	agentClient := agent.NewClient(conn)
-	return ssh.PublicKeysCallback(agentClient.Signers)
+	return ssh.PublicKeysCallback(agentClient.Signers), nil
 }
 
 func copyConn(writer, reader net.Conn) {
@@ -165,7 +165,7 @@ func dataSourceSSHTunnelRead(d *schema.ResourceData, meta interface{}) error {
 		}
 
 		if (os.Getenv("SSH_AUTH_SOCK") == "" && sshAgent) || (!sshAgent && privateKey == "") {
-			return fmt.Errorf("Either ssh-agent or a private key must be set.")
+			return fmt.Errorf("either ssh-agent or a private key must be set")
 		}
 
 		if privateKey != "" {
@@ -178,12 +178,16 @@ func dataSourceSSHTunnelRead(d *schema.ResourceData, meta interface{}) error {
 		}
 
 		if os.Getenv("SSH_AUTH_SOCK") != "" && sshAgent {
-			sshConf.Auth = append(sshConf.Auth, agentAuth())
+			agent, err := agentAuth()
+			if err != nil {
+				return err
+			}
+			sshConf.Auth = append(sshConf.Auth, agent)
 		}
 
 		localListener, err := net.Listen("tcp", localAddress)
 		if err != nil {
-			panic(err)
+			return fmt.Errorf("could not start local listener, %v", err)
 		}
 
 		effectiveAddress := localListener.Addr().String()
@@ -191,7 +195,7 @@ func dataSourceSSHTunnelRead(d *schema.ResourceData, meta interface{}) error {
 			log.Printf("[DEBUG] localAddress: %v", effectiveAddress)
 			err = d.Set("local_address", effectiveAddress)
 			if err != nil {
-				panic(err)
+				return fmt.Errorf("could not set local address, %v", err)
 			}
 		}
 
@@ -200,7 +204,7 @@ func dataSourceSSHTunnelRead(d *schema.ResourceData, meta interface{}) error {
 		log.Printf("[DEBUG] port: %v", port)
 		err = d.Set("port", port)
 		if err != nil {
-			panic(err)
+			return fmt.Errorf("could not set local port, %v", err)
 		}
 
 		go forward(d, host, remoteAddress, localListener, sshConf)
