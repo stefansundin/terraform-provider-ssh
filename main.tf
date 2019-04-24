@@ -3,8 +3,8 @@ provider "ssh" {}
 data "ssh_tunnel" "consul" {
   user            = "stefan"
   host            = "bastion.example.com"
-  //private_key     = "${file(pathexpand("~/.ssh/id_rsa"))}"
-  //ssh_agent = false  // do not use ssh-agent
+  //private_key     = "${file(pathexpand("~/.ssh/id_rsa"))}" // use private ssh key, if not set ssh-agent is used
+  //ssh_agent      = false  // do not use ssh-agent
   local_address   = "localhost:0" // use port 0 to request an ephemeral port (a random port)
   remote_address  = "localhost:8500"
 }
