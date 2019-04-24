@@ -33,6 +33,12 @@ func dataSourceSSHTunnel() *schema.Resource {
 				Description: "use ssh agent",
 				Default:     true,
 			},
+			"ssh_agent_path": &schema.Schema{
+				Type:        schema.TypeString,
+				Optional:    true,
+				Description: "The hostname",
+				Default:     "",
+			},
 			"private_key": &schema.Schema{
 				Type:        schema.TypeString,
 				Optional:    true,
@@ -84,14 +90,18 @@ func readPrivateKey(pk string) (ssh.AuthMethod, error) {
 	return ssh.PublicKeys(signer), nil
 }
 
-func agentAuth() (ssh.AuthMethod, error) {
-	sshAuthSock := os.Getenv("SSH_AUTH_SOCK")
-	log.Printf("[INFO] opening connection to %q", sshAuthSock)
-	conn, err := net.Dial("unix", sshAuthSock)
+func agentAuth(sshAgentPath string) (ssh.AuthMethod, error) {
+	if sshAgentPath == "" {
+		sshAgentPath = os.Getenv("SSH_AUTH_SOCK")
+	}
+
+	log.Printf("[INFO] opening connection to %q", sshAgentPath)
+	conn, err := net.Dial("unix", sshAgentPath)
 	log.Print("[INFO] connection open ")
 	if err != nil {
 		return nil, fmt.Errorf("could not dial with socket, %v", err)
 	}
+
 	agentClient := agent.NewClient(conn)
 	return ssh.PublicKeysCallback(agentClient.Signers), nil
 }
@@ -104,7 +114,7 @@ func dataSourceSSHTunnelRead(d *schema.ResourceData, meta interface{}) error {
 	remoteAddress := d.Get("remote_address").(string)
 	tunnelEstablished := d.Get("tunnel_established").(bool)
 	sshAgent := d.Get("ssh_agent").(bool)
-
+	sshAgentPath := d.Get("ssh_agent_path").(string)
 	// default to port 22 if not specified
 	if !strings.Contains(host, ":") {
 		host = host + ":22"
@@ -142,7 +152,7 @@ func dataSourceSSHTunnelRead(d *schema.ResourceData, meta interface{}) error {
 		}
 
 		if os.Getenv("SSH_AUTH_SOCK") != "" && sshAgent {
-			agent, err := agentAuth()
+			agent, err := agentAuth(sshAgentPath)
 			if err != nil {
 				return err
 			}
