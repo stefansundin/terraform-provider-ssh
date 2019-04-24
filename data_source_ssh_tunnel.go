@@ -99,7 +99,7 @@ func agentAuth() (ssh.AuthMethod, error) {
 func dataSourceSSHTunnelRead(d *schema.ResourceData, meta interface{}) error {
 	user := d.Get("user").(string)
 	host := d.Get("host").(string)
-	privateKey := d.Get("private_key_path").(string)
+	privateKey := d.Get("private_key").(string)
 	localAddress := d.Get("local_address").(string)
 	remoteAddress := d.Get("remote_address").(string)
 	tunnelEstablished := d.Get("tunnel_established").(bool)
