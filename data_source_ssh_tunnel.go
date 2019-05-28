@@ -6,10 +6,12 @@ import (
 	"io"
 	"log"
 	"net"
+	"os"
 	"strings"
 
 	"github.com/hashicorp/terraform/helper/schema"
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/agent"
 )
 
 func dataSourceSSHTunnel() *schema.Resource {
@@ -26,9 +28,15 @@ func dataSourceSSHTunnel() *schema.Resource {
 				Required:    true,
 				Description: "The hostname",
 			},
+			"ssh_agent": &schema.Schema{
+				Type:        schema.TypeBool,
+				Optional:    true,
+				Description: "Attempt to use the SSH agent (using the SSH_AUTH_SOCK environment variable)",
+				Default:     true,
+			},
 			"private_key": &schema.Schema{
 				Type:        schema.TypeString,
-				Required:    true,
+				Optional:    true,
 				Description: "The private SSH key",
 			},
 			"local_address": &schema.Schema{
@@ -84,7 +92,7 @@ func dataSourceSSHTunnelRead(d *schema.ResourceData, meta interface{}) error {
 	localAddress := d.Get("local_address").(string)
 	remoteAddress := d.Get("remote_address").(string)
 	tunnelEstablished := d.Get("tunnel_established").(bool)
-
+	sshAgent := d.Get("ssh_agent").(bool)
 	// default to port 22 if not specified
 	if !strings.Contains(host, ":") {
 		host = host + ":22"
@@ -96,6 +104,7 @@ func dataSourceSSHTunnelRead(d *schema.ResourceData, meta interface{}) error {
 	log.Printf("[DEBUG] localAddress: %v", localAddress)
 	log.Printf("[DEBUG] remoteAddress: %v", remoteAddress)
 	log.Printf("[DEBUG] tunnelEstablished: %v", tunnelEstablished)
+	log.Printf("[DEBUG] sshAgent: %v", sshAgent)
 
 	if tunnelEstablished == false {
 		d.Set("tunnel_established", true)
@@ -106,11 +115,31 @@ func dataSourceSSHTunnelRead(d *schema.ResourceData, meta interface{}) error {
 			Auth:            []ssh.AuthMethod{},
 		}
 
-		pubKeyAuth, err := readPrivateKey(privateKey)
-		if err != nil {
-			panic(err)
+		if privateKey != "" {
+			pubKeyAuth, err := readPrivateKey(privateKey)
+			if err != nil {
+				panic(err)
+			}
+			sshConf.Auth = append(sshConf.Auth, pubKeyAuth)
 		}
-		sshConf.Auth = append(sshConf.Auth, pubKeyAuth)
+
+		if sshAgent {
+			sshAuthSock, ok := os.LookupEnv("SSH_AUTH_SOCK")
+			if ok {
+				log.Printf("[DEBUG] opening connection to %q", sshAuthSock)
+				conn, err := net.Dial("unix", sshAuthSock)
+				if err != nil {
+					panic(err)
+				}
+				agentClient := agent.NewClient(conn)
+				agentAuth := ssh.PublicKeysCallback(agentClient.Signers)
+				sshConf.Auth = append(sshConf.Auth, agentAuth)
+			}
+		}
+
+		if len(sshConf.Auth) == 0 {
+			return fmt.Errorf("Error: No authentication method configured.")
+		}
 
 		localListener, err := net.Listen("tcp", localAddress)
 		if err != nil {
