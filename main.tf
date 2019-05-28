@@ -1,7 +1,7 @@
 provider "ssh" {}
 
 data "ssh_tunnel" "consul" {
-  user            = "stefan"
+  username        = "stefan" //Optional if not set current user will be used
   host            = "bastion.example.com"
   private_key     = "${file(pathexpand("~/.ssh/id_rsa"))}"
   ssh_agent       = false // by default, SSH agent authentication is attempted if the SSH_AUTH_SOCK environment variable is set
