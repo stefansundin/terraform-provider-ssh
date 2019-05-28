@@ -121,6 +121,8 @@ func dataSourceSSHTunnelRead(d *schema.ResourceData, meta interface{}) error {
 				panic(err)
 			}
 			sshConf.Auth = append(sshConf.Auth, pubKeyAuth)
+			// prevent the clear text key from being stored in the state file
+			d.Set("private_key", "REDACTED")
 		}
 
 		if sshAgent {
