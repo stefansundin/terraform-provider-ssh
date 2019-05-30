@@ -19,7 +19,7 @@ func dataSourceSSHTunnel() *schema.Resource {
 	return &schema.Resource{
 		Read: dataSourceSSHTunnelRead,
 		Schema: map[string]*schema.Schema{
-			"username": &schema.Schema{
+			"user": &schema.Schema{
 				Type:        schema.TypeString,
 				Optional:    true,
 				Description: "The username",
@@ -88,14 +88,13 @@ func readPrivateKey(pk string) (ssh.AuthMethod, error) {
 }
 
 func dataSourceSSHTunnelRead(d *schema.ResourceData, meta interface{}) error {
-	username := d.Get("username").(string)
+	username := d.Get("user").(string)
 	if username == "" {
 		currentUser, err := user.Current()
 		if err != nil {
 			panic(err)
 		}
 		username = currentUser.Username
-
 	}
 	host := d.Get("host").(string)
 	privateKey := d.Get("private_key").(string)
