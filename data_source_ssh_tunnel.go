@@ -167,12 +167,12 @@ func dataSourceSSHTunnelRead(d *schema.ResourceData, meta interface{}) error {
 		log.Printf("[DEBUG] port: %v", port)
 		d.Set("port", port)
 
-		go func() {
-			sshClientConn, err := ssh.Dial("tcp", host, sshConf)
-			if err != nil {
-				panic(err)
-			}
+		sshClientConn, err := ssh.Dial("tcp", host, sshConf)
+		if err != nil {
+			return fmt.Errorf("could not dial: %v", err)
+		}
 
+		go func() {
 			// The accept loop
 			for {
 				localConn, err := localListener.Accept()
