@@ -23,7 +23,6 @@ func dataSourceSSHTunnel() *schema.Resource {
 				Type:        schema.TypeString,
 				Optional:    true,
 				Description: "The username",
-				Default:     "",
 			},
 			"host": &schema.Schema{
 				Type:        schema.TypeString,
