@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"os/user"
 	"sync"
 
 	"github.com/hashicorp/terraform/terraform"
@@ -60,7 +61,15 @@ func main() {
 		for _, r := range m.Resources {
 			if r.Type == "ssh_tunnel" {
 				d := r.Primary.Attributes
-				user := d["user"]
+				username := d["username"]
+				if username == "" {
+					currentUser, err := user.Current()
+					if err != nil {
+						panic(err)
+					}
+					username = currentUser.Username
+
+				}
 				host := d["host"]
 				privateKey := d["private_key"]
 				localAddress := d["local_address"]
@@ -73,7 +82,7 @@ func main() {
 					panic(err)
 				}
 				sshConf := &ssh.ClientConfig{
-					User:            user,
+					User:            username,
 					HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 					Auth:            []ssh.AuthMethod{pubKeyAuth},
 				}

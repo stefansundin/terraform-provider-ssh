@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"os/user"
 	"strings"
 
 	"github.com/hashicorp/terraform/helper/schema"
@@ -20,8 +21,9 @@ func dataSourceSSHTunnel() *schema.Resource {
 		Schema: map[string]*schema.Schema{
 			"user": &schema.Schema{
 				Type:        schema.TypeString,
-				Required:    true,
+				Optional:    true,
 				Description: "The username",
+				Default:     "",
 			},
 			"host": &schema.Schema{
 				Type:        schema.TypeString,
@@ -86,7 +88,14 @@ func readPrivateKey(pk string) (ssh.AuthMethod, error) {
 }
 
 func dataSourceSSHTunnelRead(d *schema.ResourceData, meta interface{}) error {
-	user := d.Get("user").(string)
+	username := d.Get("user").(string)
+	if username == "" {
+		currentUser, err := user.Current()
+		if err != nil {
+			panic(err)
+		}
+		username = currentUser.Username
+	}
 	host := d.Get("host").(string)
 	privateKey := d.Get("private_key").(string)
 	localAddress := d.Get("local_address").(string)
@@ -99,7 +108,7 @@ func dataSourceSSHTunnelRead(d *schema.ResourceData, meta interface{}) error {
 		d.Set("host", host)
 	}
 
-	log.Printf("[DEBUG] user: %v", user)
+	log.Printf("[DEBUG] user: %v", username)
 	log.Printf("[DEBUG] host: %v", host)
 	log.Printf("[DEBUG] localAddress: %v", localAddress)
 	log.Printf("[DEBUG] remoteAddress: %v", remoteAddress)
@@ -110,7 +119,7 @@ func dataSourceSSHTunnelRead(d *schema.ResourceData, meta interface{}) error {
 		d.Set("tunnel_established", true)
 
 		sshConf := &ssh.ClientConfig{
-			User:            user,
+			User:            username,
 			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 			Auth:            []ssh.AuthMethod{},
 		}
