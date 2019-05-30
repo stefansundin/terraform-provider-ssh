@@ -35,6 +35,8 @@ Note that there is a gotcha when trying to apply a generated plan output file (s
 
 As a workaround, before you apply, run the companion program `terraform-open-ssh-tunnels` on the plan file first in order to reopen the SSH tunnels. [Download from the releases.](https://github.com/stefansundin/terraform-provider-ssh/releases/latest)
 
+Because of [this commit](https://github.com/stefansundin/terraform-provider-ssh/commit/37fa9835b75fde095c863fca89e2f28a0169919d), only the SSH agent is currently supported in this program. Let me know if you can think of a good fix for this.
+
 #### TODO
 
 - Support another hop (ProxyJump-like behavior)

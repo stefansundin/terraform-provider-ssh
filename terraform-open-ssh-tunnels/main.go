@@ -7,10 +7,12 @@ import (
 	"net"
 	"os"
 	"os/user"
+	"strconv"
 	"sync"
 
 	"github.com/hashicorp/terraform/terraform"
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/agent"
 )
 
 // copied from https://github.com/hashicorp/terraform/blob/7149894e418d06274bc5827c872edd58d887aad9/communicator/ssh/provisioner.go#L213-L232
@@ -70,21 +72,33 @@ func main() {
 					username = currentUser.Username
 				}
 				host := d["host"]
-				privateKey := d["private_key"]
 				localAddress := d["local_address"]
 				remoteAddress := d["remote_address"]
+				sshAgent, _ := strconv.ParseBool(d["ssh_agent"])
 
-				fmt.Printf("%s Forwarding %s to %s via %s.\n", m.Path, localAddress, remoteAddress, host)
-
-				pubKeyAuth, err := readPrivateKey(privateKey)
-				if err != nil {
-					panic(err)
-				}
 				sshConf := &ssh.ClientConfig{
 					User:            username,
 					HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-					Auth:            []ssh.AuthMethod{pubKeyAuth},
+					Auth:            []ssh.AuthMethod{},
 				}
+				if sshAgent {
+					sshAuthSock, ok := os.LookupEnv("SSH_AUTH_SOCK")
+					if ok {
+						conn, err := net.Dial("unix", sshAuthSock)
+						if err != nil {
+							panic(err)
+						}
+						agentClient := agent.NewClient(conn)
+						agentAuth := ssh.PublicKeysCallback(agentClient.Signers)
+						sshConf.Auth = append(sshConf.Auth, agentAuth)
+					}
+				}
+				if len(sshConf.Auth) == 0 {
+					fmt.Printf("Error: No authentication method configured. Only SSH agent authentication is supported in this program at the moment.\n")
+					return
+				}
+
+				fmt.Printf("%s Forwarding %s to %s via %s.\n", m.Path, localAddress, remoteAddress, host)
 
 				localListener, err := net.Listen("tcp", localAddress)
 				if err != nil {
