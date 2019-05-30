@@ -99,7 +99,6 @@ func dataSourceSSHTunnelRead(d *schema.ResourceData, meta interface{}) error {
 	privateKey := d.Get("private_key").(string)
 	localAddress := d.Get("local_address").(string)
 	remoteAddress := d.Get("remote_address").(string)
-	tunnelEstablished := d.Get("tunnel_established").(bool)
 	sshAgent := d.Get("ssh_agent").(bool)
 	// default to port 22 if not specified
 	if !strings.Contains(host, ":") {
@@ -111,8 +110,10 @@ func dataSourceSSHTunnelRead(d *schema.ResourceData, meta interface{}) error {
 	log.Printf("[DEBUG] host: %v", host)
 	log.Printf("[DEBUG] localAddress: %v", localAddress)
 	log.Printf("[DEBUG] remoteAddress: %v", remoteAddress)
-	log.Printf("[DEBUG] tunnelEstablished: %v", tunnelEstablished)
 	log.Printf("[DEBUG] sshAgent: %v", sshAgent)
+
+	tunnelEstablished := d.Get("tunnel_established").(bool)
+	log.Printf("[DEBUG] tunnelEstablished: %v", tunnelEstablished)
 
 	if tunnelEstablished == false {
 		d.Set("tunnel_established", true)
