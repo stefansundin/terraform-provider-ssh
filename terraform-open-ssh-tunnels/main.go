@@ -61,14 +61,13 @@ func main() {
 		for _, r := range m.Resources {
 			if r.Type == "ssh_tunnel" {
 				d := r.Primary.Attributes
-				username := d["username"]
+				username := d["user"]
 				if username == "" {
 					currentUser, err := user.Current()
 					if err != nil {
 						panic(err)
 					}
 					username = currentUser.Username
-
 				}
 				host := d["host"]
 				privateKey := d["private_key"]
