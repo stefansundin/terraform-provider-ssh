@@ -40,6 +40,11 @@ func dataSourceSSHTunnel() *schema.Resource {
 				Optional:    true,
 				Description: "The private SSH key",
 			},
+			"certificate": &schema.Schema{
+				Type:        schema.TypeString,
+				Optional:    true,
+				Description: "A signed SSH certificate",
+			},
 			"local_address": &schema.Schema{
 				Type:        schema.TypeString,
 				Required:    true,
@@ -64,23 +69,47 @@ func dataSourceSSHTunnel() *schema.Resource {
 	}
 }
 
-// copied from https://github.com/hashicorp/terraform/blob/7149894e418d06274bc5827c872edd58d887aad9/communicator/ssh/provisioner.go#L213-L232
+// copied from https://github.com/hashicorp/terraform/blob/43a754829ae7afcb26bccd275fb3ae9d3e0cda88/communicator/ssh/provisioner.go#L274-L317
+func signCertWithPrivateKey(pk string, certificate string) (ssh.AuthMethod, error) {
+	rawPk, err := ssh.ParseRawPrivateKey([]byte(pk))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse private key %q: %s", pk, err)
+	}
+
+	pcert, _, _, _, err := ssh.ParseAuthorizedKey([]byte(certificate))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse certificate %q: %s", certificate, err)
+	}
+
+	usigner, err := ssh.NewSignerFromKey(rawPk)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create signer from raw private key %q: %s", rawPk, err)
+	}
+
+	ucertSigner, err := ssh.NewCertSigner(pcert.(*ssh.Certificate), usigner)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create cert signer %q: %s", usigner, err)
+	}
+
+	return ssh.PublicKeys(ucertSigner), nil
+}
+
 func readPrivateKey(pk string) (ssh.AuthMethod, error) {
 	// We parse the private key on our own first so that we can
 	// show a nicer error if the private key has a password.
 	block, _ := pem.Decode([]byte(pk))
 	if block == nil {
-		return nil, fmt.Errorf("Failed to read key %q: no key found", pk)
+		return nil, fmt.Errorf("Failed to read ssh private key: no key found")
 	}
 	if block.Headers["Proc-Type"] == "4,ENCRYPTED" {
 		return nil, fmt.Errorf(
-			"Failed to read key %q: password protected keys are\n"+
-				"not supported. Please decrypt the key prior to use.", pk)
+			"Failed to read ssh private key: password protected keys are\n" +
+				"not supported. Please decrypt the key prior to use.")
 	}
 
 	signer, err := ssh.ParsePrivateKey([]byte(pk))
 	if err != nil {
-		return nil, fmt.Errorf("Failed to parse key file %q: %s", pk, err)
+		return nil, fmt.Errorf("Failed to parse ssh private key: %s", err)
 	}
 
 	return ssh.PublicKeys(signer), nil
@@ -97,6 +126,7 @@ func dataSourceSSHTunnelRead(d *schema.ResourceData, meta interface{}) error {
 	}
 	host := d.Get("host").(string)
 	privateKey := d.Get("private_key").(string)
+	certificate := d.Get("certificate").(string)
 	localAddress := d.Get("local_address").(string)
 	remoteAddress := d.Get("remote_address").(string)
 	sshAgent := d.Get("ssh_agent").(bool)
@@ -124,12 +154,28 @@ func dataSourceSSHTunnelRead(d *schema.ResourceData, meta interface{}) error {
 			Auth:            []ssh.AuthMethod{},
 		}
 
+		// https://github.com/hashicorp/terraform/blob/43a754829ae7afcb26bccd275fb3ae9d3e0cda88/communicator/ssh/provisioner.go#L240-L258
 		if privateKey != "" {
-			pubKeyAuth, err := readPrivateKey(privateKey)
-			if err != nil {
-				panic(err)
+			if certificate != "" {
+				log.Println("using client certificate for authentication")
+
+				certSigner, err := signCertWithPrivateKey(privateKey, certificate)
+				if err != nil {
+					panic(err)
+				}
+				sshConf.Auth = append(sshConf.Auth, certSigner)
+
+				// prevent the clear text cert from being stored in the state file
+				d.Set("certificate", "REDACTED")
+			} else {
+				log.Println("using private key for authentication")
+
+				pubKeyAuth, err := readPrivateKey(privateKey)
+				if err != nil {
+					panic(err)
+				}
+				sshConf.Auth = append(sshConf.Auth, pubKeyAuth)
 			}
-			sshConf.Auth = append(sshConf.Auth, pubKeyAuth)
 			// prevent the clear text key from being stored in the state file
 			d.Set("private_key", "REDACTED")
 		}
