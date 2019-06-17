@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/pem"
 	"fmt"
 	"io"
 	"net"
@@ -14,28 +13,6 @@ import (
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 )
-
-// copied from https://github.com/hashicorp/terraform/blob/7149894e418d06274bc5827c872edd58d887aad9/communicator/ssh/provisioner.go#L213-L232
-func readPrivateKey(pk string) (ssh.AuthMethod, error) {
-	// We parse the private key on our own first so that we can
-	// show a nicer error if the private key has a password.
-	block, _ := pem.Decode([]byte(pk))
-	if block == nil {
-		return nil, fmt.Errorf("Failed to read key %q: no key found", pk)
-	}
-	if block.Headers["Proc-Type"] == "4,ENCRYPTED" {
-		return nil, fmt.Errorf(
-			"Failed to read key %q: password protected keys are\n"+
-				"not supported. Please decrypt the key prior to use.", pk)
-	}
-
-	signer, err := ssh.ParsePrivateKey([]byte(pk))
-	if err != nil {
-		return nil, fmt.Errorf("Failed to parse key file %q: %s", pk, err)
-	}
-
-	return ssh.PublicKeys(signer), nil
-}
 
 func main() {
 	if len(os.Args) < 2 {
