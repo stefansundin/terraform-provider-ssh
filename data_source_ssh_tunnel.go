@@ -224,19 +224,21 @@ func dataSourceSSHTunnelRead(d *schema.ResourceData, meta interface{}) error {
 			for {
 				localConn, err := localListener.Accept()
 				if err != nil {
-					panic(err)
+					log.Printf("error accepting connection: %s", err)
+					continue
 				}
 
 				sshConn, err := sshClientConn.Dial("tcp", remoteAddress)
 				if err != nil {
-					panic(err)
+					log.Printf("error opening connection to %s: %s", remoteAddress, err)
+					continue
 				}
 
 				// Send traffic from the SSH server -> local program
 				go func() {
 					_, err = io.Copy(sshConn, localConn)
 					if err != nil {
-						panic(err)
+						log.Printf("error copying data remote -> local: %s", err)
 					}
 				}()
 
@@ -244,7 +246,7 @@ func dataSourceSSHTunnelRead(d *schema.ResourceData, meta interface{}) error {
 				go func() {
 					_, err = io.Copy(localConn, sshConn)
 					if err != nil {
-						panic(err)
+						log.Printf("error copying data local -> remote: %s", err)
 					}
 				}()
 			}
