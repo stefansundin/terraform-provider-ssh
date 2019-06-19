@@ -1,5 +1,5 @@
 VERSION = v0.0.3
-LDFLAGS = -ldflags '-s -w'
+LDFLAGS = -ldflags '-s -w' -gcflags=-trimpath=${PWD} -asmflags=-trimpath=${PWD}
 GOARCH = amd64
 linux: export GOOS=linux
 linux_arm: export GOOS=linux
