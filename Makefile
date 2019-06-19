@@ -10,6 +10,8 @@ linux_arm64: export GOARCH=arm64
 darwin: export GOOS=darwin
 windows: export GOOS=windows
 
+.PHONY: all linux linux_arm linux_arm64 darwin windows clean
+
 all: linux linux_arm linux_arm64 darwin windows
 
 linux:
@@ -52,7 +54,6 @@ windows:
 	go build $(LDFLAGS) -o terraform-open-ssh-tunnels/terraform-open-ssh-tunnels.exe terraform-open-ssh-tunnels/main.go
 	(cd terraform-open-ssh-tunnels && zip ../release/terraform-open-ssh-tunnels_${VERSION}_${GOOS}_${GOARCH}.zip terraform-open-ssh-tunnels.exe)
 
-.PHONY: clean
 clean:
 	rm -rf release
 	rm -f terraform-provider-ssh terraform-provider-ssh.exe terraform-open-ssh-tunnels/terraform-open-ssh-tunnels terraform-open-ssh-tunnels/terraform-open-ssh-tunnels.exe terraform-provider-ssh_${VERSION} terraform-provider-ssh_${VERSION}.exe
