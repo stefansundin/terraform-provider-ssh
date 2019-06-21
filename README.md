@@ -15,9 +15,9 @@ On Linux:
 
 ```shell
 mkdir -p terraform.d/plugins/linux_amd64
-wget https://github.com/stefansundin/terraform-provider-ssh/releases/download/v0.0.3/terraform-provider-ssh_v0.0.3_linux_amd64.zip
-unzip terraform-provider-ssh_v0.0.3_linux_amd64.zip -d terraform.d/plugins/linux_amd64
-rm terraform-provider-ssh_v0.0.3_linux_amd64.zip
+wget https://github.com/stefansundin/terraform-provider-ssh/releases/download/v0.0.4/terraform-provider-ssh_v0.0.4_linux_amd64.zip
+unzip terraform-provider-ssh_v0.0.4_linux_amd64.zip -d terraform.d/plugins/linux_amd64
+rm terraform-provider-ssh_v0.0.4_linux_amd64.zip
 terraform init
 ```
 
@@ -25,9 +25,9 @@ On Mac:
 
 ```shell
 mkdir -p terraform.d/plugins/darwin_amd64
-wget https://github.com/stefansundin/terraform-provider-ssh/releases/download/v0.0.3/terraform-provider-ssh_v0.0.3_darwin_amd64.zip
-unzip terraform-provider-ssh_v0.0.3_darwin_amd64.zip -d terraform.d/plugins/darwin_amd64
-rm terraform-provider-ssh_v0.0.3_darwin_amd64.zip
+wget https://github.com/stefansundin/terraform-provider-ssh/releases/download/v0.0.4/terraform-provider-ssh_v0.0.4_darwin_amd64.zip
+unzip terraform-provider-ssh_v0.0.4_darwin_amd64.zip -d terraform.d/plugins/darwin_amd64
+rm terraform-provider-ssh_v0.0.4_darwin_amd64.zip
 terraform init
 ```
 

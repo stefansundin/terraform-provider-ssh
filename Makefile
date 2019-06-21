@@ -1,4 +1,4 @@
-VERSION = v0.0.3
+VERSION = v0.0.4
 LDFLAGS = -ldflags '-s -w' -gcflags=-trimpath=${PWD} -asmflags=-trimpath=${PWD}
 GOARCH = amd64
 linux: export GOOS=linux
