@@ -1,38 +1,18 @@
 package main
 
 import (
-	"encoding/pem"
 	"fmt"
 	"io"
 	"net"
 	"os"
+	"os/user"
+	"strconv"
 	"sync"
 
 	"github.com/hashicorp/terraform/terraform"
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/agent"
 )
-
-// copied from https://github.com/hashicorp/terraform/blob/7149894e418d06274bc5827c872edd58d887aad9/communicator/ssh/provisioner.go#L213-L232
-func readPrivateKey(pk string) (ssh.AuthMethod, error) {
-	// We parse the private key on our own first so that we can
-	// show a nicer error if the private key has a password.
-	block, _ := pem.Decode([]byte(pk))
-	if block == nil {
-		return nil, fmt.Errorf("Failed to read key %q: no key found", pk)
-	}
-	if block.Headers["Proc-Type"] == "4,ENCRYPTED" {
-		return nil, fmt.Errorf(
-			"Failed to read key %q: password protected keys are\n"+
-				"not supported. Please decrypt the key prior to use.", pk)
-	}
-
-	signer, err := ssh.ParsePrivateKey([]byte(pk))
-	if err != nil {
-		return nil, fmt.Errorf("Failed to parse key file %q: %s", pk, err)
-	}
-
-	return ssh.PublicKeys(signer), nil
-}
 
 func main() {
 	if len(os.Args) < 2 {
@@ -60,23 +40,42 @@ func main() {
 		for _, r := range m.Resources {
 			if r.Type == "ssh_tunnel" {
 				d := r.Primary.Attributes
-				user := d["user"]
+				username := d["user"]
+				if username == "" {
+					currentUser, err := user.Current()
+					if err != nil {
+						panic(err)
+					}
+					username = currentUser.Username
+				}
 				host := d["host"]
-				privateKey := d["private_key"]
 				localAddress := d["local_address"]
 				remoteAddress := d["remote_address"]
+				sshAgent, _ := strconv.ParseBool(d["ssh_agent"])
+
+				sshConf := &ssh.ClientConfig{
+					User:            username,
+					HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+					Auth:            []ssh.AuthMethod{},
+				}
+				if sshAgent {
+					sshAuthSock, ok := os.LookupEnv("SSH_AUTH_SOCK")
+					if ok {
+						conn, err := net.Dial("unix", sshAuthSock)
+						if err != nil {
+							panic(err)
+						}
+						agentClient := agent.NewClient(conn)
+						agentAuth := ssh.PublicKeysCallback(agentClient.Signers)
+						sshConf.Auth = append(sshConf.Auth, agentAuth)
+					}
+				}
+				if len(sshConf.Auth) == 0 {
+					fmt.Printf("Error: No authentication method configured. Only SSH agent authentication is supported in this program at the moment.\n")
+					return
+				}
 
 				fmt.Printf("%s Forwarding %s to %s via %s.\n", m.Path, localAddress, remoteAddress, host)
-
-				pubKeyAuth, err := readPrivateKey(privateKey)
-				if err != nil {
-					panic(err)
-				}
-				sshConf := &ssh.ClientConfig{
-					User:            user,
-					HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-					Auth:            []ssh.AuthMethod{pubKeyAuth},
-				}
 
 				localListener, err := net.Listen("tcp", localAddress)
 				if err != nil {
@@ -94,19 +93,21 @@ func main() {
 					for {
 						localConn, err := localListener.Accept()
 						if err != nil {
-							panic(err)
+							fmt.Printf("error accepting connection: %s", err)
+							continue
 						}
 
 						sshConn, err := sshClientConn.Dial("tcp", remoteAddress)
 						if err != nil {
-							panic(err)
+							fmt.Printf("error opening connection to %s: %s", remoteAddress, err)
+							continue
 						}
 
 						// Send traffic from the SSH server -> local program
 						go func() {
 							_, err = io.Copy(sshConn, localConn)
 							if err != nil {
-								panic(err)
+								fmt.Printf("error copying data remote -> local: %s", err)
 							}
 						}()
 
@@ -114,7 +115,7 @@ func main() {
 						go func() {
 							_, err = io.Copy(localConn, sshConn)
 							if err != nil {
-								panic(err)
+								fmt.Printf("error copying data local -> remote: %s", err)
 							}
 						}()
 					}
