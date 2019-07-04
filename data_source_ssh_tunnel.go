@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/user"
 	"strings"
+	"time"
 
 	"github.com/hashicorp/terraform/helper/schema"
 	"golang.org/x/crypto/ssh"
@@ -64,6 +65,16 @@ func dataSourceSSHTunnel() *schema.Resource {
 				Type:     schema.TypeBool,
 				Optional: true,
 				Default:  false,
+			},
+			"keepalive": {
+				Type:     schema.TypeBool,
+				Optional: true,
+				Default:  true,
+			},
+			"keepalive_interval": {
+				Type:     schema.TypeInt,
+				Optional: true,
+				Default:  2,
 			},
 		},
 	}
@@ -130,6 +141,8 @@ func dataSourceSSHTunnelRead(d *schema.ResourceData, meta interface{}) error {
 	localAddress := d.Get("local_address").(string)
 	remoteAddress := d.Get("remote_address").(string)
 	sshAgent := d.Get("ssh_agent").(bool)
+	keepalive := d.Get("keepalive").(bool)
+	keepaliveInterval := time.Duration(d.Get("keepalive_interval").(int))
 	// default to port 22 if not specified
 	if !strings.Contains(host, ":") {
 		host = host + ":22"
@@ -195,7 +208,7 @@ func dataSourceSSHTunnelRead(d *schema.ResourceData, meta interface{}) error {
 		}
 
 		if len(sshConf.Auth) == 0 {
-			return fmt.Errorf("Error: No authentication method configured.")
+			return fmt.Errorf("error: No authentication method configured")
 		}
 
 		localListener, err := net.Listen("tcp", localAddress)
@@ -217,6 +230,21 @@ func dataSourceSSHTunnelRead(d *schema.ResourceData, meta interface{}) error {
 		sshClientConn, err := ssh.Dial("tcp", host, sshConf)
 		if err != nil {
 			return fmt.Errorf("could not dial: %v", err)
+		}
+
+		// send keepalive requests into the established channel
+		if keepalive {
+			go func() {
+				t := time.NewTicker(keepaliveInterval * time.Second)
+				defer t.Stop()
+				for range t.C {
+					_, _, err = sshClientConn.SendRequest("keepalive@golang.org", true, nil)
+					if err != nil {
+						log.Printf("could not send keepalive: %v", err)
+						continue
+					}
+				}
+			}()
 		}
 
 		go func() {
