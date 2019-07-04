@@ -8,6 +8,8 @@ data "ssh_tunnel" "consul" {
   ssh_agent       = false // by default, SSH agent authentication is attempted if the SSH_AUTH_SOCK environment variable is set
   local_address   = "localhost:0" // use port 0 to request an ephemeral port (a random port)
   remote_address  = "localhost:8500"
+  #keepalive = true // by default the keepalive is enabled
+  #keepalive_interval = 2
 }
 
 provider "consul" {
