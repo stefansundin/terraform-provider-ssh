@@ -1,6 +1,8 @@
 module github.com/stefansundin/terraform-provider-ssh
 
 require (
-	github.com/hashicorp/terraform v0.11.14
-	golang.org/x/crypto v0.0.0-20180211211603-9de5f2eaf759
+	github.com/golang/protobuf v1.3.2
+	github.com/hashicorp/terraform v0.12.6
+	golang.org/x/crypto v0.0.0-20190701094942-4def268fd1a4
+	google.golang.org/grpc v1.23.0
 )
