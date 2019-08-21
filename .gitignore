@@ -5,6 +5,7 @@ terraform.d
 *.tfstate
 *.tfstate.backup
 *.tfplan
+*.pb.go
 terraform-open-ssh-tunnels/terraform-open-ssh-tunnels
 terraform-open-ssh-tunnels/terraform-open-ssh-tunnels.exe
 /terraform-open-ssh-tunnels_*

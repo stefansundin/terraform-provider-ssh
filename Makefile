@@ -1,4 +1,4 @@
-VERSION = v0.0.4
+VERSION = v0.1.0
 LDFLAGS = -ldflags '-s -w' -gcflags=-trimpath=${PWD} -asmflags=-trimpath=${PWD}
 GOARCH = amd64
 linux: export GOOS=linux
@@ -10,11 +10,14 @@ linux_arm64: export GOARCH=arm64
 darwin: export GOOS=darwin
 windows: export GOOS=windows
 
-.PHONY: all linux linux_arm linux_arm64 darwin windows clean
+.PHONY: all pb linux linux_arm linux_arm64 darwin windows clean
 
 all: linux linux_arm linux_arm64 darwin windows
 
-linux:
+pb:
+	protoc -I pb/ pb/ssh_tunnel.proto --go_out=plugins=grpc:pb
+
+linux: pb
 	mkdir -p release
 	rm -f terraform-provider-ssh_${VERSION} release/terraform-provider-ssh_${VERSION}_${GOOS}_${GOARCH}.zip terraform-open-ssh-tunnels_${VERSION} release/terraform-open-ssh-tunnels_${VERSION}_${GOOS}_${GOARCH}.zip
 	go build $(LDFLAGS) -o terraform-provider-ssh_${VERSION}
@@ -22,7 +25,7 @@ linux:
 	go build $(LDFLAGS) -o terraform-open-ssh-tunnels/terraform-open-ssh-tunnels terraform-open-ssh-tunnels/main.go
 	(cd terraform-open-ssh-tunnels && zip ../release/terraform-open-ssh-tunnels_${VERSION}_${GOOS}_${GOARCH}.zip terraform-open-ssh-tunnels)
 
-linux_arm:
+linux_arm: pb
 	mkdir -p release
 	rm -f terraform-provider-ssh_${VERSION} release/terraform-provider-ssh_${VERSION}_${GOOS}_${GOARCH}.zip terraform-open-ssh-tunnels_${VERSION} release/terraform-open-ssh-tunnels_${VERSION}_${GOOS}_${GOARCH}.zip
 	go build $(LDFLAGS) -o terraform-provider-ssh_${VERSION}
@@ -30,7 +33,7 @@ linux_arm:
 	go build $(LDFLAGS) -o terraform-open-ssh-tunnels/terraform-open-ssh-tunnels terraform-open-ssh-tunnels/main.go
 	(cd terraform-open-ssh-tunnels && zip ../release/terraform-open-ssh-tunnels_${VERSION}_${GOOS}_${GOARCH}.zip terraform-open-ssh-tunnels)
 
-linux_arm64:
+linux_arm64: pb
 	mkdir -p release
 	rm -f terraform-provider-ssh_${VERSION} release/terraform-provider-ssh_${VERSION}_${GOOS}_${GOARCH}.zip terraform-open-ssh-tunnels_${VERSION} release/terraform-open-ssh-tunnels_${VERSION}_${GOOS}_${GOARCH}.zip
 	go build $(LDFLAGS) -o terraform-provider-ssh_${VERSION}
@@ -38,7 +41,7 @@ linux_arm64:
 	go build $(LDFLAGS) -o terraform-open-ssh-tunnels/terraform-open-ssh-tunnels terraform-open-ssh-tunnels/main.go
 	(cd terraform-open-ssh-tunnels && zip ../release/terraform-open-ssh-tunnels_${VERSION}_${GOOS}_${GOARCH}.zip terraform-open-ssh-tunnels)
 
-darwin:
+darwin: pb
 	mkdir -p release
 	rm -f terraform-provider-ssh_${VERSION} release/terraform-provider-ssh_${VERSION}_${GOOS}_${GOARCH}.zip terraform-open-ssh-tunnels_${VERSION} release/terraform-open-ssh-tunnels_${VERSION}_${GOOS}_${GOARCH}.zip
 	go build $(LDFLAGS) -o terraform-provider-ssh_${VERSION}
@@ -46,7 +49,7 @@ darwin:
 	go build $(LDFLAGS) -o terraform-open-ssh-tunnels/terraform-open-ssh-tunnels terraform-open-ssh-tunnels/main.go
 	(cd terraform-open-ssh-tunnels && zip ../release/terraform-open-ssh-tunnels_${VERSION}_${GOOS}_${GOARCH}.zip terraform-open-ssh-tunnels)
 
-windows:
+windows: pb
 	mkdir -p release
 	rm -f terraform-provider-ssh_${VERSION}.exe release/terraform-provider-ssh_${VERSION}_${GOOS}_${GOARCH}.zip terraform-open-ssh-tunnels_${VERSION}.exe release/terraform-open-ssh-tunnels_${VERSION}_${GOOS}_${GOARCH}.zip
 	go build $(LDFLAGS) -o terraform-provider-ssh_${VERSION}.exe
@@ -56,4 +59,4 @@ windows:
 
 clean:
 	rm -rf release
-	rm -f terraform-provider-ssh terraform-provider-ssh.exe terraform-open-ssh-tunnels/terraform-open-ssh-tunnels terraform-open-ssh-tunnels/terraform-open-ssh-tunnels.exe terraform-provider-ssh_${VERSION} terraform-provider-ssh_${VERSION}.exe
+	rm -f terraform-provider-ssh terraform-provider-ssh.exe terraform-open-ssh-tunnels/terraform-open-ssh-tunnels terraform-open-ssh-tunnels/terraform-open-ssh-tunnels.exe terraform-provider-ssh_${VERSION} terraform-provider-ssh_${VERSION}.exe pb/ssh_tunnel.pb.go
