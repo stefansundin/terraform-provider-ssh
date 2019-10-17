@@ -3,14 +3,17 @@ package main
 import (
 	"encoding/pem"
 	"fmt"
+	"golang.org/x/net/proxy"
 	"io"
 	"log"
 	"net"
+	"net/url"
 	"os"
 	"os/user"
 	"strings"
 
 	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/magisterquis/connectproxy"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 )
@@ -34,6 +37,11 @@ func dataSourceSSHTunnel() *schema.Resource {
 				Optional:    true,
 				Description: "Attempt to use the SSH agent (using the SSH_AUTH_SOCK environment variable)",
 				Default:     true,
+			},
+			"http_proxy": &schema.Schema{
+				Type:        schema.TypeString,
+				Optional:    true,
+				Description: "Use http/https proxy with connect method to reach host",
 			},
 			"private_key": &schema.Schema{
 				Type:        schema.TypeString,
@@ -66,6 +74,12 @@ func dataSourceSSHTunnel() *schema.Resource {
 				Default:  false,
 			},
 		},
+	}
+}
+
+func check(e error) {
+	if e != nil {
+		panic(e)
 	}
 }
 
@@ -130,6 +144,7 @@ func dataSourceSSHTunnelRead(d *schema.ResourceData, meta interface{}) error {
 	localAddress := d.Get("local_address").(string)
 	remoteAddress := d.Get("remote_address").(string)
 	sshAgent := d.Get("ssh_agent").(bool)
+	proxyAddress := d.Get("http_proxy").(string)
 	// default to port 22 if not specified
 	if !strings.Contains(host, ":") {
 		host = host + ":22"
@@ -214,9 +229,28 @@ func dataSourceSSHTunnelRead(d *schema.ResourceData, meta interface{}) error {
 		log.Printf("[DEBUG] port: %v", port)
 		d.Set("port", port)
 
-		sshClientConn, err := ssh.Dial("tcp", host, sshConf)
-		if err != nil {
-			return fmt.Errorf("could not dial: %v", err)
+		var sshClientConn *ssh.Client
+		if proxyAddress != "" || os.Getenv("HTTP_PROXY") != "" {
+			var u *url.URL
+			if os.Getenv("HTTP_PROXY") != "" {
+				u, _ = url.Parse(os.Getenv("HTTP_PROXY"))
+				check(err)
+			}
+			if proxyAddress != "" {
+				u, err = url.Parse(proxyAddress)
+				check(err)
+			}
+			d, err := connectproxy.New(u, proxy.Direct)
+			check(err)
+			c, err := d.Dial("tcp", host)
+			check(err)
+			sc, ch, rq, err := ssh.NewClientConn(c, host, sshConf)
+			sshClientConn = ssh.NewClient(sc, ch, rq)
+		} else {
+			sshClientConn, err = ssh.Dial("tcp", host, sshConf)
+			if err != nil {
+				return fmt.Errorf("could not dial: %v", err)
+			}
 		}
 
 		go func() {
