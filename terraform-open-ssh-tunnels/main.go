@@ -2,8 +2,11 @@ package main
 
 import (
 	"fmt"
+	"github.com/magisterquis/connectproxy"
+	"golang.org/x/net/proxy"
 	"io"
 	"net"
+	"net/url"
 	"os"
 	"os/user"
 	"strconv"
@@ -14,6 +17,11 @@ import (
 	"golang.org/x/crypto/ssh/agent"
 )
 
+func check(e error) {
+	if e != nil {
+		panic(e)
+	}
+}
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Printf("Usage: %s <plan>\n", os.Args[0])
@@ -74,7 +82,7 @@ func main() {
 					fmt.Printf("Error: No authentication method configured. Only SSH agent authentication is supported in this program at the moment.\n")
 					return
 				}
-
+				proxyAddress := d["http_proxy"]
 				fmt.Printf("%s Forwarding %s to %s via %s.\n", m.Path, localAddress, remoteAddress, host)
 
 				localListener, err := net.Listen("tcp", localAddress)
@@ -84,7 +92,29 @@ func main() {
 
 				wg.Add(1)
 				go func() {
-					sshClientConn, err := ssh.Dial("tcp", host, sshConf)
+					var sshClientConn *ssh.Client
+					if proxyAddress != "" || os.Getenv("HTTP_PROXY") != "" {
+						var u *url.URL
+						if os.Getenv("HTTP_PROXY") != "" {
+							u, _ = url.Parse(os.Getenv("HTTP_PROXY"))
+							check(err)
+						}
+						if proxyAddress != "" {
+							u, err = url.Parse(proxyAddress)
+							check(err)
+						}
+						d, err := connectproxy.New(u, proxy.Direct)
+						check(err)
+						c, err := d.Dial("tcp", host)
+						check(err)
+						sc, ch, rq, err := ssh.NewClientConn(c, host, sshConf)
+						sshClientConn = ssh.NewClient(sc, ch, rq)
+					} else {
+						sshClientConn, err = ssh.Dial("tcp", host, sshConf)
+						if err != nil {
+							return fmt.Errorf("could not dial: %v", err)
+						}
+					}
 					if err != nil {
 						panic(err)
 					}
