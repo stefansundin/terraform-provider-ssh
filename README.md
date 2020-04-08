@@ -1,4 +1,4 @@
-[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Fnexusix%2Fterraform-provider-ssh.svg?type=shield)](https://app.fossa.io/projects/git%2Bgithub.com%2Fnexusix%2Fterraform-provider-ssh?ref=badge_shield)
+
 
 ### terraform-provider-ssh
 
