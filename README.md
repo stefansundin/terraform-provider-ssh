@@ -47,5 +47,4 @@ Because of [this commit](https://github.com/stefansundin/terraform-provider-ssh/
 - Note that the Windows binary is completely untested!
 
 
-## License
-[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Fnexusix%2Fterraform-provider-ssh.svg?type=large)](https://app.fossa.io/projects/git%2Bgithub.com%2Fnexusix%2Fterraform-provider-ssh?ref=badge_large)
+
