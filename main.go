@@ -4,17 +4,19 @@ import (
 	"context"
 	"encoding/pem"
 	"fmt"
+	"golang.org/x/net/proxy"
 	"io"
 	"log"
 	"net"
+	"net/url"
 	"os"
 	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
-	"github.com/hashicorp/terraform/plugin"
-	"github.com/hashicorp/terraform/terraform"
+	"github.com/hashicorp/terraform-plugin-sdk/plugin"
+	"github.com/hashicorp/terraform-plugin-sdk/terraform"
+	"github.com/magisterquis/connectproxy"
 	"github.com/stefansundin/terraform-provider-ssh/pb"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
@@ -128,15 +130,31 @@ func (s *sshTunnelServer) OpenTunnel(ctx context.Context, conf *pb.TunnelConfigu
 	check(err)
 
 	effectiveAddress := localListener.Addr().String()
-
-	lastColon := strings.LastIndex(effectiveAddress, ":")
-	port, err := strconv.Atoi(effectiveAddress[lastColon+1 : len(effectiveAddress)])
+	_, port, err := net.SplitHostPort(effectiveAddress)
 	check(err)
 	log.Printf("[DEBUG] port: %v", port)
-
-	sshClientConn, err := ssh.Dial("tcp", conf.Host, sshConf)
-	if err != nil {
-		return nil, fmt.Errorf("could not dial: %v", err)
+	var sshClientConn *ssh.Client
+	if conf.ProxyAddress != "" || os.Getenv("HTTP_PROXY") != "" {
+		var u *url.URL
+		if os.Getenv("HTTP_PROXY") != "" {
+			u, _ = url.Parse(os.Getenv("HTTP_PROXY"))
+			check(err)
+		}
+		if conf.ProxyAddress != "" {
+			u, err = url.Parse(conf.ProxyAddress)
+			check(err)
+		}
+		d, err := connectproxy.New(u, proxy.Direct)
+		check(err)
+		c, err := d.Dial("tcp", conf.Host)
+		check(err)
+		sc, ch, rq, err := ssh.NewClientConn(c, conf.Host, sshConf)
+		sshClientConn = ssh.NewClient(sc, ch, rq)
+	} else {
+		sshClientConn, err = ssh.Dial("tcp", conf.Host, sshConf)
+		if err != nil {
+			return nil, fmt.Errorf("could not dial: %v", err)
+		}
 	}
 
 	go func() {
@@ -175,7 +193,7 @@ func (s *sshTunnelServer) OpenTunnel(ctx context.Context, conf *pb.TunnelConfigu
 	return &pb.Response{
 		Success:          true,
 		EffectiveAddress: effectiveAddress,
-		Port:             int32(port),
+		Port:             port,
 	}, nil
 }
 

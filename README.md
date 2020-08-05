@@ -9,6 +9,10 @@ bandaid [until it is supported in Terraform itself](https://github.com/hashicorp
 
 See [main.tf](main.tf).
 
+#### Requirements
+
+* protoc (``` brew install protobuf ```)
+* protoc-gen-go (``` go install github.com/golang/protobuf/protoc-gen-go ```)
 #### Installation
 
 On Linux:

@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package pb;
 
+option go_package = ".;pb";
+
 service SshTunnel {
   rpc OpenTunnel(TunnelConfiguration) returns (Response) {}
 }
@@ -14,10 +16,11 @@ message TunnelConfiguration {
   string certificate = 5;
   string local_address = 6;
   string remote_address = 7;
+  string proxy_address = 8;
 }
 
 message Response {
   bool success = 1;
   string effective_address = 2;
-  int32 port = 3;
+  string port = 3;
 }

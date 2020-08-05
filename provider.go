@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/hashicorp/terraform/helper/schema"
-	"github.com/hashicorp/terraform/terraform"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/terraform"
 	"github.com/stefansundin/terraform-provider-ssh/pb"
 	"google.golang.org/grpc"
 )
@@ -23,7 +23,7 @@ func Provider() terraform.ResourceProvider {
 		Schema: map[string]*schema.Schema{
 			"port": {
 				Type:     schema.TypeInt,
-				Required: true,
+				Optional: true,
 			},
 			"server_started": {
 				Type:     schema.TypeBool,
