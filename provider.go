@@ -25,7 +25,6 @@ func Provider() terraform.ResourceProvider {
 			"port": {
 				Type:     schema.TypeInt,
 				Optional: true,
-				Default:  0,
 			},
 			"server_started": {
 				Type:     schema.TypeBool,
@@ -44,6 +43,7 @@ func providerConfigure(d *schema.ResourceData) (interface{}, error) {
 	port := d.Get("port").(int)
 	if port == 0 {
 		port, _ = getFreePort()
+		d.Set("port", port)
 	}
 	serverStarted := d.Get("server_started").(bool)
 	serverAddr := fmt.Sprintf("localhost:%d", port)

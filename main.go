@@ -149,7 +149,6 @@ func (s *sshTunnelServer) OpenTunnel(ctx context.Context, conf *pb.TunnelConfigu
 		c, err := d.Dial("tcp", conf.Host)
 		check(err)
 		sc, ch, rq, err := ssh.NewClientConn(c, conf.Host, sshConf)
-		check(err)
 		sshClientConn = ssh.NewClient(sc, ch, rq)
 	} else {
 		sshClientConn, err = ssh.Dial("tcp", conf.Host, sshConf)
