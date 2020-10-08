@@ -1,8 +1,25 @@
+terraform {
+  required_providers {
+    mysql = {
+      source = "terraform-providers/mysql"
+    }
+    null = {
+      source = "hashicorp/null"
+    }
+    ssh = {
+      source = "kw.com/ssh/ssh"
+      version = "0.0.6"
+
+    }
+  }
+  required_version = ">= 0.13"
+}
+
 provider "ssh" {}
 
 resource "null_resource" "vagrant" {
   triggers = {
-    always_run = "${timestamp()}"
+    always_run = timestamp()
   }
 
   provisioner "local-exec" {
