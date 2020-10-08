@@ -10,3 +10,5 @@ terraform-open-ssh-tunnels/terraform-open-ssh-tunnels.exe
 /terraform-open-ssh-tunnels_*
 /release
 /vendor
+.vagrant/
+output.txt
