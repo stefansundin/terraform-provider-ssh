@@ -3,6 +3,6 @@ module github.com/stefansundin/terraform-provider-ssh
 go 1.14
 
 require (
-	github.com/hashicorp/terraform v0.11.14
+	github.com/hashicorp/terraform v0.12.29
 	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
 )
