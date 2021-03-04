@@ -31,7 +31,7 @@ func providerConfigure(d *schema.ResourceData) (interface{}, error) {
 		return nil, fmt.Errorf("Couldn't run SSH server proxy: %v\n", err)
 	}
 
-	command := exec.Command("sh", "-c", path)
+	command := exec.Command(path)
 	command.Env = os.Environ()
 	command.Env = append(command.Env, fmt.Sprintf("SSH_TUNNEL_PPID=%v", ppid))
 

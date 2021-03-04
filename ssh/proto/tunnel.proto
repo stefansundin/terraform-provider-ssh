@@ -1,6 +1,5 @@
 syntax = "proto3";
 package proto;
-option go_package = "github.com/stafansundin/terraform-provider-ssh/ssh/proto";
 message InitSSHTunnelRequest {
   string user = 1;
   string address = 2;
