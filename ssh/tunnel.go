@@ -107,7 +107,8 @@ func (st *SSHTunnel) Start(ctx context.Context) (err error) {
 	}
 
 	go func() {
-		for {
+		connect := true
+		for connect {
 			localConn, err := localListener.Accept()
 			if err != nil {
 				log.Printf("error accepting connection: %s", err)
@@ -126,6 +127,7 @@ func (st *SSHTunnel) Start(ctx context.Context) (err error) {
 			select {
 			case <-ctx.Done():
 				localListener.Close()
+				connect = false
 			}
 		}
 	}()
