@@ -6,8 +6,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 )
 
-type SSHTunnelManager struct{}
-
 func SSHProvider() *schema.Provider {
 	return &schema.Provider{
 		Schema: map[string]*schema.Schema{},
@@ -21,5 +19,5 @@ func SSHProvider() *schema.Provider {
 
 func providerConfigure(ctx context.Context, d *schema.ResourceData) (interface{}, diag.Diagnostics) {
 	var diags diag.Diagnostics
-	return &SSHTunnelManager{}, diags
+	return nil, diags
 }

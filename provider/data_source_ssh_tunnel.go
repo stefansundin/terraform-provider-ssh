@@ -38,6 +38,12 @@ func dataSourceSSHTunnel() *schema.Resource {
 				Description: "The private SSH key",
 				Sensitive:   true,
 			},
+			"private_key_password": &schema.Schema{
+				Type:        schema.TypeString,
+				Optional:    true,
+				Description: "The private SSH key password",
+				Sensitive:   true,
+			},
 			"certificate": &schema.Schema{
 				Type:        schema.TypeString,
 				Optional:    true,
@@ -153,13 +159,13 @@ func flattenEndpoint(endpoint ssh.Endpoint) []interface{} {
 
 func dataSourceSSHTunnelRead(ctx context.Context, d *schema.ResourceData, _ interface{}) diag.Diagnostics {
 	var diags diag.Diagnostics
-	//client := meta.(*SSHTunnelManager)
 
 	sshTunnel := ssh.SSHTunnel{
-		User:        d.Get("user").(string),
-		SshAuthSock: d.Get("ssh_auth_sock").(string),
-		PrivateKey:  d.Get("private_key").(string),
-		Certificate: d.Get("certificate").(string),
+		User:               d.Get("user").(string),
+		SshAuthSock:        d.Get("ssh_auth_sock").(string),
+		PrivateKey:         d.Get("private_key").(string),
+		PrivateKeyPassword: d.Get("private_key_password").(string),
+		Certificate:        d.Get("certificate").(string),
 	}
 
 	if v, ok := d.GetOk("server"); ok {
@@ -176,7 +182,7 @@ func dataSourceSSHTunnelRead(ctx context.Context, d *schema.ResourceData, _ inte
 		sshTunnel.Remote = expandEndpoint(v.([]interface{}))
 	}
 
-	err := sshTunnel.Start()
+	err := sshTunnel.Start(ctx)
 	if err != nil {
 		return diag.FromErr(err)
 	}
