@@ -6,55 +6,64 @@ import (
 	"io"
 	"log"
 	"net"
+	"strconv"
+	"strings"
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 )
 
-type SSHTunnel struct{}
-
-type SSHTunnelConfig struct {
-	User          string
-	PrivateKey    string
-	Certificate   string
-	SshAuthSock   string
-	LocalAddress  string
-	RemoteAddress string
-	Address       string
+type SSHTunnel struct {
+	User        string
+	PrivateKey  string
+	Certificate string
+	SshAuthSock string
+	Local       Endpoint
+	Remote      Endpoint
+	Server      Endpoint
 }
 
-func (st *SSHTunnel) Init(request SSHTunnelConfig) (address string, err error) {
+type Endpoint struct {
+	Host string
+	Port int
+}
+
+func (e Endpoint) String() string {
+	return fmt.Sprintf("%s:%d", e.Host, e.Port)
+}
+
+func (st *SSHTunnel) Start() (err error) {
 	log.Println("[DEBUG] Creating SSH Tunnel")
 
 	sshConf := &ssh.ClientConfig{
-		User:            request.User,
+		User:            st.User,
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		Auth:            []ssh.AuthMethod{},
 	}
 
-	if request.PrivateKey != "" {
-		if request.Certificate != "" {
+	if st.PrivateKey != "" {
+		if st.Certificate != "" {
 			log.Println("[DEBUG] using client certificate for authentication")
-			certSigner, err := signCertWithPrivateKey(request.PrivateKey, request.Certificate)
+			certSigner, err := signCertWithPrivateKey(st.PrivateKey, st.Certificate)
 			if err != nil {
-				return "", err
+				return err
 			}
 			sshConf.Auth = append(sshConf.Auth, certSigner)
 		} else {
 			log.Printf("[DEBUG] using private key for authentication")
-			pubKeyAuth, err := readPrivateKey(request.PrivateKey)
+			pubKeyAuth, err := readPrivateKey(st.PrivateKey)
 			if err != nil {
-				return "", err
+				return err
 			}
 			sshConf.Auth = append(sshConf.Auth, pubKeyAuth)
 		}
 	}
 
-	if request.SshAuthSock != "" {
-		log.Printf("[DEBUG] opening connection to %q", request.SshAuthSock)
-		conn, err := net.Dial("unix", request.SshAuthSock)
+	if st.SshAuthSock != "" {
+		log.Printf("[DEBUG] opening connection to %q", st.SshAuthSock)
+		conn, err := net.Dial("unix", st.SshAuthSock)
 		if err != nil {
-			return "", err
+			return err
 		}
 		agentClient := agent.NewClient(conn)
 		agentAuth := ssh.PublicKeysCallback(agentClient.Signers)
@@ -62,17 +71,18 @@ func (st *SSHTunnel) Init(request SSHTunnelConfig) (address string, err error) {
 	}
 
 	if len(sshConf.Auth) == 0 {
-		return "", fmt.Errorf("Error: No authentication method configured.")
+		return fmt.Errorf("Error: No authentication method configured.")
 	}
 
-	localListener, err := net.Listen("tcp", request.LocalAddress)
+	localListener, err := net.Listen("tcp", st.Local.String())
 	if err != nil {
-		return "", err
+		return err
 	}
-	effectiveAddress := localListener.Addr().String()
-	sshClientConn, err := ssh.Dial("tcp", request.Address, sshConf)
+	netParts := strings.Split(localListener.Addr().String(), ":")
+	st.Local.Port, _ = strconv.Atoi(netParts[1])
+	sshClientConn, err := ssh.Dial("tcp", st.Server.String(), sshConf)
 	if err != nil {
-		return "", fmt.Errorf("could not dial: %v", err)
+		return fmt.Errorf("could not dial: %v", err)
 	}
 
 	go func() {
@@ -84,9 +94,9 @@ func (st *SSHTunnel) Init(request SSHTunnelConfig) (address string, err error) {
 			}
 			defer localConn.Close()
 
-			sshConn, err := sshClientConn.Dial("tcp", request.RemoteAddress)
+			sshConn, err := sshClientConn.Dial("tcp", st.Remote.String())
 			if err != nil {
-				log.Printf("error opening connection to %s: %s", request.RemoteAddress, err)
+				log.Printf("error opening connection to %s: %s", st.Remote.String(), err)
 				continue
 			}
 			defer sshConn.Close()
@@ -106,7 +116,7 @@ func (st *SSHTunnel) Init(request SSHTunnelConfig) (address string, err error) {
 		}
 	}()
 
-	return effectiveAddress, nil
+	return nil
 }
 
 func signCertWithPrivateKey(pk string, certificate string) (ssh.AuthMethod, error) {

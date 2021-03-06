@@ -4,7 +4,7 @@ terraform {
       source = "stephansundin/ssh"
     }
     consul = {
-      source = "consul"
+      source  = "consul"
       version = ">= 2.0"
     }
   }
