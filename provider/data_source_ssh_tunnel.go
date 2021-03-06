@@ -1,14 +1,16 @@
 package provider
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/url"
 	"os"
 	"os/user"
 
+	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-	"github.com/stefansundin/terraform-provider-ssh/ssh/proto"
+	"github.com/stefansundin/terraform-provider-ssh/ssh"
 )
 
 var (
@@ -42,7 +44,7 @@ var (
 
 func dataSourceSSHTunnel() *schema.Resource {
 	return &schema.Resource{
-		Read: dataSourceSSHTunnelRead,
+		ReadContext: dataSourceSSHTunnelRead,
 		Schema: map[string]*schema.Schema{
 			"user": &schema.Schema{
 				Type:        schema.TypeString,
@@ -101,10 +103,11 @@ func dataSourceSSHTunnel() *schema.Resource {
 	}
 }
 
-func dataSourceSSHTunnelRead(d *schema.ResourceData, meta interface{}) error {
-	client := meta.(*SSHProviderClient)
+func dataSourceSSHTunnelRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
+	var diags diag.Diagnostics
+	client := meta.(*ssh.SSHTunnel)
 
-	initSSHTunnelRequest := proto.InitSSHTunnelRequest{
+	sshTunnelConfig := ssh.SSHTunnelConfig{
 		User:          d.Get("user").(string),
 		Address:       d.Get("address").(string),
 		SshAuthSock:   d.Get("ssh_auth_sock").(string),
@@ -114,29 +117,29 @@ func dataSourceSSHTunnelRead(d *schema.ResourceData, meta interface{}) error {
 		RemoteAddress: d.Get("remote_address").(string),
 	}
 
-	log.Printf("[DEBUG] tunnel configuration: %v", initSSHTunnelRequest)
+	log.Printf("[DEBUG] tunnel configuration: %v", sshTunnelConfig)
 
-	resp, err := client.tunnel.Init(&initSSHTunnelRequest)
+	effectiveAddress, err := client.Init(sshTunnelConfig)
 	if err != nil {
-		return err
+		return diag.FromErr(err)
 	}
 
-	log.Printf("[DEBUG] tunnel status: %v", resp)
+	log.Printf("[DEBUG] tunnel address: %v", effectiveAddress)
 
-	if resp.EffectiveAddress != initSSHTunnelRequest.LocalAddress {
-		initSSHTunnelRequest.LocalAddress = resp.EffectiveAddress
-		parsedEffectiveAddress, err := url.Parse(fmt.Sprintf("//%s", initSSHTunnelRequest.LocalAddress))
+	if effectiveAddress != sshTunnelConfig.LocalAddress {
+		sshTunnelConfig.LocalAddress = effectiveAddress
+		parsedEffectiveAddress, err := url.Parse(fmt.Sprintf("//%s", sshTunnelConfig.LocalAddress))
 		if err != nil {
-			return err
+			return diag.FromErr(err)
 		}
 		port := parsedEffectiveAddress.Port()
 		log.Printf("[DEBUG] local_port: %v", port)
 		d.Set("local_port", port)
-		d.Set("local_address", initSSHTunnelRequest.LocalAddress)
+		d.Set("local_address", sshTunnelConfig.LocalAddress)
 	}
 
-	log.Printf("[DEBUG] local_address: %v", initSSHTunnelRequest.LocalAddress)
-	d.SetId(initSSHTunnelRequest.LocalAddress)
+	log.Printf("[DEBUG] local_address: %v", sshTunnelConfig.LocalAddress)
+	d.SetId(sshTunnelConfig.LocalAddress)
 
-	return nil
+	return diags
 }

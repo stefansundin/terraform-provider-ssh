@@ -7,15 +7,24 @@ import (
 	"log"
 	"net"
 
-	"github.com/stefansundin/terraform-provider-ssh/ssh/proto"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 )
 
 type SSHTunnel struct{}
 
-func (st *SSHTunnel) Init(request *proto.InitSSHTunnelRequest) (response *proto.InitSSHTunnelResponse, err error) {
-	fmt.Println("[DEBUG] Creating SSH Tunnel")
+type SSHTunnelConfig struct {
+	User          string
+	PrivateKey    string
+	Certificate   string
+	SshAuthSock   string
+	LocalAddress  string
+	RemoteAddress string
+	Address       string
+}
+
+func (st *SSHTunnel) Init(request SSHTunnelConfig) (address string, err error) {
+	log.Println("[DEBUG] Creating SSH Tunnel")
 
 	sshConf := &ssh.ClientConfig{
 		User:            request.User,
@@ -28,14 +37,14 @@ func (st *SSHTunnel) Init(request *proto.InitSSHTunnelRequest) (response *proto.
 			log.Println("[DEBUG] using client certificate for authentication")
 			certSigner, err := signCertWithPrivateKey(request.PrivateKey, request.Certificate)
 			if err != nil {
-				return nil, err
+				return "", err
 			}
 			sshConf.Auth = append(sshConf.Auth, certSigner)
 		} else {
 			log.Printf("[DEBUG] using private key for authentication")
 			pubKeyAuth, err := readPrivateKey(request.PrivateKey)
 			if err != nil {
-				return nil, err
+				return "", err
 			}
 			sshConf.Auth = append(sshConf.Auth, pubKeyAuth)
 		}
@@ -45,7 +54,7 @@ func (st *SSHTunnel) Init(request *proto.InitSSHTunnelRequest) (response *proto.
 		log.Printf("[DEBUG] opening connection to %q", request.SshAuthSock)
 		conn, err := net.Dial("unix", request.SshAuthSock)
 		if err != nil {
-			return nil, err
+			return "", err
 		}
 		agentClient := agent.NewClient(conn)
 		agentAuth := ssh.PublicKeysCallback(agentClient.Signers)
@@ -53,17 +62,17 @@ func (st *SSHTunnel) Init(request *proto.InitSSHTunnelRequest) (response *proto.
 	}
 
 	if len(sshConf.Auth) == 0 {
-		return nil, fmt.Errorf("Error: No authentication method configured.")
+		return "", fmt.Errorf("Error: No authentication method configured.")
 	}
 
 	localListener, err := net.Listen("tcp", request.LocalAddress)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	effectiveAddress := localListener.Addr().String()
 	sshClientConn, err := ssh.Dial("tcp", request.Address, sshConf)
 	if err != nil {
-		return nil, fmt.Errorf("could not dial: %v", err)
+		return "", fmt.Errorf("could not dial: %v", err)
 	}
 
 	go func() {
@@ -73,12 +82,14 @@ func (st *SSHTunnel) Init(request *proto.InitSSHTunnelRequest) (response *proto.
 				log.Printf("error accepting connection: %s", err)
 				continue
 			}
+			defer localConn.Close()
 
 			sshConn, err := sshClientConn.Dial("tcp", request.RemoteAddress)
 			if err != nil {
 				log.Printf("error opening connection to %s: %s", request.RemoteAddress, err)
 				continue
 			}
+			defer sshConn.Close()
 
 			go func() {
 				_, err = io.Copy(sshConn, localConn)
@@ -86,7 +97,6 @@ func (st *SSHTunnel) Init(request *proto.InitSSHTunnelRequest) (response *proto.
 					log.Printf("error copying data remote -> local: %s", err)
 				}
 			}()
-
 			go func() {
 				_, err = io.Copy(localConn, sshConn)
 				if err != nil {
@@ -96,9 +106,7 @@ func (st *SSHTunnel) Init(request *proto.InitSSHTunnelRequest) (response *proto.
 		}
 	}()
 
-	return &proto.InitSSHTunnelResponse{
-		EffectiveAddress: effectiveAddress,
-	}, nil
+	return effectiveAddress, nil
 }
 
 func signCertWithPrivateKey(pk string, certificate string) (ssh.AuthMethod, error) {

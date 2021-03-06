@@ -21,6 +21,10 @@ data "consul_keys" "keys" {
   }
 }
 
+data "ssh_tunnel_close" "consul" {
+  depends_on      = [data.consul_keys.keys]
+}
+
 output "local_address" {
   value = data.ssh_tunnel.consul.local_address
 }
