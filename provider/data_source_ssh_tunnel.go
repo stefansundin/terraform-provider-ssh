@@ -205,9 +205,9 @@ func flattenEndpoint(endpoint ssh.Endpoint) []interface{} {
 	return []interface{}{m}
 }
 
-func dataSourceSSHTunnelRead(ctx context.Context, d *schema.ResourceData, _ interface{}) diag.Diagnostics {
+func dataSourceSSHTunnelRead(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	var diags diag.Diagnostics
-
+	providerManager := m.(*SSHProviderManager)
 	sshTunnel := ssh.SSHTunnel{
 		User: d.Get("user").(string),
 	}
@@ -261,10 +261,11 @@ func dataSourceSSHTunnelRead(ctx context.Context, d *schema.ResourceData, _ inte
 		sshTunnel.Remote = expandEndpoint(v.([]interface{}))
 	}
 
-	err := sshTunnel.Start(ctx)
+	listener, err := sshTunnel.Start()
 	if err != nil {
 		return diag.FromErr(err)
 	}
+	providerManager.Listeners = append(providerManager.Listeners, listener)
 
 	log.Printf("[DEBUG] local port: %v", sshTunnel.Local.Port)
 	d.Set("local", flattenEndpoint(sshTunnel.Local))

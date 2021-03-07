@@ -1,7 +1,7 @@
 package ssh
 
 import (
-	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -115,7 +115,7 @@ type SSHTunnel struct {
 	User   string
 }
 
-func (st *SSHTunnel) Start(ctx context.Context) (err error) {
+func (st *SSHTunnel) Start() (*net.Listener, error) {
 	log.Println("[DEBUG] Creating SSH Tunnel")
 
 	sshConf := &ssh.ClientConfig{
@@ -126,7 +126,7 @@ func (st *SSHTunnel) Start(ctx context.Context) (err error) {
 	for _, auth := range st.Auth {
 		if auth.Enabled() {
 			if methods, err := auth.Authenticate(); err != nil {
-				return err
+				return nil, err
 			} else {
 				sshConf.Auth = append(sshConf.Auth, methods...)
 			}
@@ -140,7 +140,7 @@ func (st *SSHTunnel) Start(ctx context.Context) (err error) {
 
 	localListener, err := net.Listen(protocol, st.Local.String())
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if st.Local.Socket == "" {
@@ -150,7 +150,7 @@ func (st *SSHTunnel) Start(ctx context.Context) (err error) {
 
 	sshClientConn, err := ssh.Dial("tcp", st.Server.String(), sshConf)
 	if err != nil {
-		return fmt.Errorf("could not dial: %v", err)
+		return nil, fmt.Errorf("could not dial: %v", err)
 	}
 
 	copyConn := func(writer, reader net.Conn) {
@@ -164,10 +164,13 @@ func (st *SSHTunnel) Start(ctx context.Context) (err error) {
 	}
 
 	go func() {
-		connect := true
-		for connect {
+		for {
 			localConn, err := localListener.Accept()
 			if err != nil {
+				if errors.Is(err, net.ErrClosed) {
+					log.Printf("Stopping connection loop")
+					break
+				}
 				log.Printf("error accepting connection: %s", err)
 				continue
 			}
@@ -189,5 +192,5 @@ func (st *SSHTunnel) Start(ctx context.Context) (err error) {
 		}
 	}()
 
-	return nil
+	return &localListener, nil
 }

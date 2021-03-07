@@ -3,7 +3,7 @@ layout: "insightops"
 page_title: "SSH: ssh_tunnel_close"
 sidebar_current: "docs-ssh-data-source-tunnel-close"
 description: |-
-  Create SSH tunnel close.
+  Closes SSH tunnel local connections.
 ---
 
 # ssh_tunnel
@@ -16,8 +16,12 @@ This data source is a workaround which should depend on a last resource/module, 
 provider "ssh" {}
 
 data "ssh_tunnel" "consul" {
-  user        = "root" // Optional. If not set, your local user's username will be used.
-  private_key = file(pathexpand("~/.ssh/id_rsa"))
+  user = "root"
+  auth {
+    private_key {
+      content = file(pathexpand("~/.ssh/id_rsa"))
+    }
+  }
   server {
     host = "localhost"
     port = 22
