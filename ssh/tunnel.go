@@ -14,11 +14,22 @@ import (
 )
 
 type Endpoint struct {
-	Host string
-	Port int
+	Host   string
+	Port   int
+	Socket string
+}
+
+func (e Endpoint) Address() string {
+	if e.Socket != "" {
+		return fmt.Sprintf("unix://%s", e.Socket)
+	}
+	return fmt.Sprintf("%s:%d", e.Host, e.Port)
 }
 
 func (e Endpoint) String() string {
+	if e.Socket != "" {
+		return e.Socket
+	}
 	return fmt.Sprintf("%s:%d", e.Host, e.Port)
 }
 
@@ -122,13 +133,21 @@ func (st *SSHTunnel) Start(ctx context.Context) (err error) {
 		}
 	}
 
-	localListener, err := net.Listen("tcp", st.Local.String())
+	protocol := "tcp"
+	if st.Local.Socket != "" {
+		protocol = "unix"
+	}
+
+	localListener, err := net.Listen(protocol, st.Local.String())
 	if err != nil {
 		return err
 	}
 
-	netParts := strings.Split(localListener.Addr().String(), ":")
-	st.Local.Port, _ = strconv.Atoi(netParts[1])
+	if st.Local.Socket == "" {
+		netParts := strings.Split(localListener.Addr().String(), ":")
+		st.Local.Port, _ = strconv.Atoi(netParts[1])
+	}
+
 	sshClientConn, err := ssh.Dial("tcp", st.Server.String(), sshConf)
 	if err != nil {
 		return fmt.Errorf("could not dial: %v", err)
@@ -153,20 +172,20 @@ func (st *SSHTunnel) Start(ctx context.Context) (err error) {
 				continue
 			}
 
-			remoteConn, err := sshClientConn.Dial("tcp", st.Remote.String())
+			protocol = "tcp"
+
+			if st.Remote.Socket != "" {
+				protocol = "unix"
+			}
+
+			remoteConn, err := sshClientConn.Dial(protocol, st.Remote.String())
 			if err != nil {
-				log.Printf("error opening connection to %s: %s", st.Remote.String(), err)
+				log.Printf("error opening connection to %s: %s", st.Remote.Address(), err)
 				continue
 			}
 
 			go copyConn(localConn, remoteConn)
 			go copyConn(remoteConn, localConn)
-
-			select {
-			case <-ctx.Done():
-				localListener.Close()
-				connect = false
-			}
 		}
 	}()
 

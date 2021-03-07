@@ -79,13 +79,15 @@ The following arguments are supported by the `local` configuration block:
 
 * `host` - (Optional) local SSH bind hostname or IP. Default is localhost.
 * `port` - (Optional) local SSH bind port. Default port is equal to 0 and is selected randomly.
+* `socket` - (Optional) local SSH bind socket
 
 ### remote Configuration Block
 
 The following arguments are supported by the `remote` configuration block:
 
 * `host` - (Optional) remote SSH bind hostname or IP. Default is localhost.
-* `port` - (Required) remote SSH bind port.
+* `port` - (Optional) remote SSH bind port.
+* `socket` - (Optional) remote SSH bind socket
 
 ### private_key Configuration Block
 

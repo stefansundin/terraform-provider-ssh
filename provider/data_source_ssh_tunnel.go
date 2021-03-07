@@ -113,18 +113,26 @@ func dataSourceSSHTunnel() *schema.Resource {
 				MinItems:    1,
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
+						"socket": {
+							Type:          schema.TypeString,
+							Optional:      true,
+							Description:   "local socket",
+							ConflictsWith: []string{"local.0.host", "local.0.port"},
+						},
 						"host": {
-							Type:        schema.TypeString,
-							Optional:    true,
-							Default:     "localhost",
-							Description: "local bind host",
+							Type:          schema.TypeString,
+							Optional:      true,
+							Default:       "localhost",
+							Description:   "local bind host",
+							ConflictsWith: []string{"local.0.socket"},
 						},
 						"port": {
-							Type:         schema.TypeInt,
-							Optional:     true,
-							Description:  "local bind port",
-							Default:      0,
-							ValidateFunc: validation.IsPortNumber,
+							Type:          schema.TypeInt,
+							Optional:      true,
+							Description:   "local bind port",
+							Default:       0,
+							ValidateFunc:  validation.IsPortNumber,
+							ConflictsWith: []string{"local.0.socket"},
 						},
 						"address": {
 							Type:        schema.TypeString,
@@ -141,17 +149,25 @@ func dataSourceSSHTunnel() *schema.Resource {
 				MaxItems:    1,
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
+						"socket": {
+							Type:          schema.TypeString,
+							Optional:      true,
+							Description:   "remote socket",
+							ConflictsWith: []string{"remote.0.host", "remote.0.port"},
+						},
 						"host": {
-							Type:        schema.TypeString,
-							Optional:    true,
-							Default:     "localhost",
-							Description: "remote bind host",
+							Type:          schema.TypeString,
+							Optional:      true,
+							Default:       "localhost",
+							Description:   "remote bind host",
+							ConflictsWith: []string{"remote.0.socket"},
 						},
 						"port": {
-							Type:         schema.TypeInt,
-							Required:     true,
-							Description:  "remote bind port",
-							ValidateFunc: validation.IsPortNumber,
+							Type:          schema.TypeInt,
+							Optional:      true,
+							Description:   "remote bind port",
+							ValidateFunc:  validation.IsPortNumber,
+							ConflictsWith: []string{"remote.0.socket"},
 						},
 						"address": {
 							Type:        schema.TypeString,
@@ -168,6 +184,9 @@ func dataSourceSSHTunnel() *schema.Resource {
 func expandEndpoint(m []interface{}) ssh.Endpoint {
 	endpoint := ssh.Endpoint{}
 	endpointData := m[0].(map[string]interface{})
+	if socket, ok := endpointData["socket"]; ok {
+		endpoint.Socket = socket.(string)
+	}
 	if host, ok := endpointData["host"]; ok {
 		endpoint.Host = host.(string)
 	}
@@ -181,7 +200,8 @@ func flattenEndpoint(endpoint ssh.Endpoint) []interface{} {
 	m := map[string]interface{}{}
 	m["host"] = endpoint.Host
 	m["port"] = endpoint.Port
-	m["address"] = endpoint.String()
+	m["socket"] = endpoint.Socket
+	m["address"] = endpoint.Address()
 	return []interface{}{m}
 }
 
@@ -248,7 +268,7 @@ func dataSourceSSHTunnelRead(ctx context.Context, d *schema.ResourceData, _ inte
 
 	log.Printf("[DEBUG] local port: %v", sshTunnel.Local.Port)
 	d.Set("local", flattenEndpoint(sshTunnel.Local))
-	d.SetId(sshTunnel.Local.String())
+	d.SetId(sshTunnel.Local.Address())
 
 	return diags
 }
