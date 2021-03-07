@@ -1,5 +1,5 @@
 ---
-layout: "insightops"
+layout: "ssh"
 page_title: "Provider: SSH"
 sidebar_current: "docs-ssh-index"
 description: |-

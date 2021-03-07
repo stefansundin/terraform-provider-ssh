@@ -1,5 +1,5 @@
 ---
-layout: "insightops"
+layout: "ssh"
 page_title: "SSH: ssh_tunnel"
 sidebar_current: "docs-ssh-data-source-tunnel"
 description: |-
