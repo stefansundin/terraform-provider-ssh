@@ -13,17 +13,6 @@ import (
 	"golang.org/x/crypto/ssh/agent"
 )
 
-type SSHTunnel struct {
-	User               string
-	PrivateKey         string
-	PrivateKeyPassword string
-	Certificate        string
-	SshAuthSock        string
-	Local              Endpoint
-	Remote             Endpoint
-	Server             Endpoint
-}
-
 type Endpoint struct {
 	Host string
 	Port int
@@ -33,55 +22,104 @@ func (e Endpoint) String() string {
 	return fmt.Sprintf("%s:%d", e.Host, e.Port)
 }
 
+type SSHAuthSock struct {
+	Path string
+}
+
+func (sa SSHAuthSock) Enabled() bool {
+	return sa.Path != ""
+}
+
+func (sa SSHAuthSock) Authenticate() (methods []ssh.AuthMethod, err error) {
+	conn, err := net.Dial("unix", sa.Path)
+	if err != nil {
+		return nil, err
+	}
+	agentClient := agent.NewClient(conn)
+	methods = append(methods, ssh.PublicKeysCallback(agentClient.Signers))
+	return
+}
+
+type SSHPassword struct {
+	Password string
+}
+
+func (pw SSHPassword) Enabled() bool {
+	return pw.Password != ""
+}
+
+func (pw SSHPassword) Authenticate() (methods []ssh.AuthMethod, err error) {
+	methods = append(methods, ssh.Password(pw.Password))
+	return
+}
+
+type SSHPrivateKey struct {
+	PrivateKey  string
+	Password    string
+	Certificate string
+}
+
+func (pk SSHPrivateKey) Enabled() bool {
+	return pk.PrivateKey != ""
+}
+
+func (pk SSHPrivateKey) Authenticate() (methods []ssh.AuthMethod, err error) {
+	var signer ssh.Signer
+	if pk.Password != "" {
+		log.Println("[DEBUG] using private key without password for authentication")
+		signer, err = ssh.ParsePrivateKeyWithPassphrase([]byte(pk.PrivateKey), []byte(pk.Password))
+	} else {
+		log.Println("[DEBUG] using private key with password for authentication")
+		signer, err = ssh.ParsePrivateKey([]byte(pk.PrivateKey))
+	}
+	if err != nil {
+		return nil, fmt.Errorf("Failed to parse private key:\n%v", err)
+	}
+	methods = append(methods, ssh.PublicKeys(signer))
+	if pk.Certificate != "" {
+		log.Println("[DEBUG] using client certificate for authentication")
+		pcert, _, _, _, err := ssh.ParseAuthorizedKey([]byte(pk.Certificate))
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse certificate %q: %s", pk.Certificate, err)
+		}
+		certSigner, err := ssh.NewCertSigner(pcert.(*ssh.Certificate), signer)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create cert signer %q: %s", certSigner, err)
+		}
+		methods = append(methods, ssh.PublicKeys(certSigner))
+	}
+	return
+}
+
+type SSHAuth interface {
+	Enabled() bool
+	Authenticate() (methods []ssh.AuthMethod, err error)
+}
+
+type SSHTunnel struct {
+	Local  Endpoint
+	Remote Endpoint
+	Server Endpoint
+	Auth   []SSHAuth
+	User   string
+}
+
 func (st *SSHTunnel) Start(ctx context.Context) (err error) {
 	log.Println("[DEBUG] Creating SSH Tunnel")
 
 	sshConf := &ssh.ClientConfig{
 		User:            st.User,
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Auth:            []ssh.AuthMethod{},
 	}
 
-	if st.PrivateKey != "" {
-		var signer ssh.Signer
-		if st.PrivateKeyPassword != "" {
-			log.Println("[DEBUG] using private key without password for authentication")
-			signer, err = ssh.ParsePrivateKeyWithPassphrase([]byte(st.PrivateKey), []byte(st.PrivateKeyPassword))
-		} else {
-			log.Println("[DEBUG] using private key with password for authentication")
-			signer, err = ssh.ParsePrivateKey([]byte(st.PrivateKey))
-		}
-		if err != nil {
-			return fmt.Errorf("Failed to parse private key:\n%v", err)
-		}
-		sshConf.Auth = append(sshConf.Auth, ssh.PublicKeys(signer))
-		if st.Certificate != "" {
-			log.Println("[DEBUG] using client certificate for authentication")
-			pcert, _, _, _, err := ssh.ParseAuthorizedKey([]byte(st.Certificate))
-			if err != nil {
-				return fmt.Errorf("failed to parse certificate %q: %s", st.Certificate, err)
+	for _, auth := range st.Auth {
+		if auth.Enabled() {
+			if methods, err := auth.Authenticate(); err != nil {
+				return err
+			} else {
+				sshConf.Auth = append(sshConf.Auth, methods...)
 			}
-			certSigner, err := ssh.NewCertSigner(pcert.(*ssh.Certificate), signer)
-			if err != nil {
-				return fmt.Errorf("failed to create cert signer %q: %s", certSigner, err)
-			}
-			sshConf.Auth = append(sshConf.Auth, ssh.PublicKeys(certSigner))
 		}
-	}
-
-	if st.SshAuthSock != "" {
-		log.Printf("[DEBUG] opening connection to %q", st.SshAuthSock)
-		conn, err := net.Dial("unix", st.SshAuthSock)
-		if err != nil {
-			return err
-		}
-		agentClient := agent.NewClient(conn)
-		agentAuth := ssh.PublicKeysCallback(agentClient.Signers)
-		sshConf.Auth = append(sshConf.Auth, agentAuth)
-	}
-
-	if len(sshConf.Auth) == 0 {
-		return fmt.Errorf("Error: No authentication method configured.")
 	}
 
 	localListener, err := net.Listen("tcp", st.Local.String())

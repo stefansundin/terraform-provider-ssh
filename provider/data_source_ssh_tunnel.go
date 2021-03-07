@@ -24,31 +24,59 @@ func dataSourceSSHTunnel() *schema.Resource {
 					return user.Current()
 				},
 			},
-			"ssh_auth_sock": &schema.Schema{
-				Type:        schema.TypeString,
+			"auth": {
+				Type:        schema.TypeList,
 				Optional:    true,
-				Description: "Attempt to use the SSH agent (using the SSH_AUTH_SOCK environment variable)",
-				DefaultFunc: func() (interface{}, error) {
-					return os.Getenv("SSH_AUTH_SOCK"), nil
+				Description: "SSH server auth",
+				MaxItems:    1,
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"sock": &schema.Schema{
+							Type:        schema.TypeString,
+							Optional:    true,
+							Description: "Attempt to use the SSH agent (using the SSH_AUTH_SOCK environment variable)",
+							DefaultFunc: func() (interface{}, error) {
+								return os.Getenv("SSH_AUTH_SOCK"), nil
+							},
+						},
+						"private_key": {
+							Type:          schema.TypeList,
+							Optional:      true,
+							Description:   "SSH server auth",
+							MaxItems:      1,
+							ConflictsWith: []string{"auth.0.password"},
+							Elem: &schema.Resource{
+								Schema: map[string]*schema.Schema{
+									"content": {
+										Type:        schema.TypeString,
+										Optional:    true,
+										Description: "The private SSH key",
+										Sensitive:   true,
+									},
+									"password": &schema.Schema{
+										Type:        schema.TypeString,
+										Optional:    true,
+										Description: "The private SSH key password",
+										Sensitive:   true,
+									},
+									"certificate": &schema.Schema{
+										Type:        schema.TypeString,
+										Optional:    true,
+										Description: "A signed SSH certificate",
+										Sensitive:   true,
+									},
+								},
+							},
+						},
+						"password": &schema.Schema{
+							Type:          schema.TypeString,
+							Optional:      true,
+							Description:   "The private SSH key password",
+							Sensitive:     true,
+							ConflictsWith: []string{"auth.0.private_key"},
+						},
+					},
 				},
-			},
-			"private_key": &schema.Schema{
-				Type:        schema.TypeString,
-				Optional:    true,
-				Description: "The private SSH key",
-				Sensitive:   true,
-			},
-			"private_key_password": &schema.Schema{
-				Type:        schema.TypeString,
-				Optional:    true,
-				Description: "The private SSH key password",
-				Sensitive:   true,
-			},
-			"certificate": &schema.Schema{
-				Type:        schema.TypeString,
-				Optional:    true,
-				Description: "A signed SSH certificate",
-				Sensitive:   true,
 			},
 			"server": {
 				Type:        schema.TypeList,
@@ -161,11 +189,42 @@ func dataSourceSSHTunnelRead(ctx context.Context, d *schema.ResourceData, _ inte
 	var diags diag.Diagnostics
 
 	sshTunnel := ssh.SSHTunnel{
-		User:               d.Get("user").(string),
-		SshAuthSock:        d.Get("ssh_auth_sock").(string),
-		PrivateKey:         d.Get("private_key").(string),
-		PrivateKeyPassword: d.Get("private_key_password").(string),
-		Certificate:        d.Get("certificate").(string),
+		User: d.Get("user").(string),
+	}
+
+	sshTunnel.Auth = []ssh.SSHAuth{}
+
+	if v, ok := d.GetOk("auth"); ok {
+		methodsData := v.([]interface{})
+		if len(methodsData) > 0 {
+			methods := methodsData[0].(map[string]interface{})
+			if v, ok := methods["sock"]; ok {
+				sshTunnel.Auth = append(sshTunnel.Auth, ssh.SSHAuthSock{
+					Path: v.(string),
+				})
+			}
+			if v, ok := methods["private_key"]; ok {
+				pkData := v.([]interface{})
+				if len(pkData) > 0 {
+					privateKey := ssh.SSHPrivateKey{}
+					pk := pkData[0].(map[string]interface{})
+					if content, ok := pk["content"]; ok {
+						privateKey.PrivateKey = content.(string)
+					}
+					if password, ok := pk["password"]; ok {
+						privateKey.Password = password.(string)
+					}
+					if certificate, ok := pk["certificate"]; ok {
+						privateKey.Certificate = certificate.(string)
+					}
+					sshTunnel.Auth = append(sshTunnel.Auth, privateKey)
+				}
+			} else if v, ok := methods["password"]; ok {
+				sshTunnel.Auth = append(sshTunnel.Auth, ssh.SSHPassword{
+					Password: v.(string),
+				})
+			}
+		}
 	}
 
 	if v, ok := d.GetOk("server"); ok {

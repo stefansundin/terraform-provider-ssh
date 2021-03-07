@@ -18,8 +18,12 @@ Use the navigation to the left to read about the available resources.
 provider "ssh" {}
 
 data "ssh_tunnel" "consul" {
-  user        = "root"
-  private_key = file(pathexpand("~/.ssh/id_rsa"))
+  user = "root"
+  auth {
+    private_key {
+      content = file(pathexpand("~/.ssh/id_rsa"))
+    }
+  }
   server {
     host = "localhost"
     port = 22

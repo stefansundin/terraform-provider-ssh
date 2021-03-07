@@ -28,7 +28,7 @@ data "ssh_tunnel" "consul" {
 }
 
 provider "consul" {
-  address = data.ssh_tunnel.consul.local[0].address
+  address = data.ssh_tunnel.consul.local.0.address
   scheme  = "http"
 }
 

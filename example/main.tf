@@ -1,10 +1,15 @@
-provider "ssh" {}
+provider "ssh" {
+}
 
 data "ssh_tunnel" "consul" {
-  user        = "root" // Optional. If not set, your local user's username will be used.
-  private_key = file(pathexpand("~/.ssh/id_rsa"))
+  user = "root"
+  auth {
+    private_key {
+      content = file(pathexpand("~/.ssh/id_rsa"))
+    }
+  }
   server {
-    host = "localhost"
+    host = "8.8.8.8"
     port = 22
   }
   remote {
@@ -13,7 +18,7 @@ data "ssh_tunnel" "consul" {
 }
 
 provider "consul" {
-  address = data.ssh_tunnel.consul.local[0].address
+  address = data.ssh_tunnel.consul.local.0.address
   scheme  = "http"
 }
 
@@ -29,11 +34,11 @@ data "ssh_tunnel_close" "consul" {
 }
 
 output "local_address" {
-  value = data.ssh_tunnel.consul.local[0].host
+  value = data.ssh_tunnel.consul.local.0.host
 }
 
 output "random_port" {
-  value = data.ssh_tunnel.consul.local[0].port
+  value = data.ssh_tunnel.consul.local.0.port
 }
 
 output "revision" {
