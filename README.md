@@ -3,7 +3,7 @@
 This provider enables SSH port forwarding in Terraform. It is intended as a
 bandaid [until it is supported in Terraform itself](https://github.com/hashicorp/terraform/issues/8367).
 
-*This provider does not support Terraform v0.12 yet. There were some changes made that makes the upgrade non-trivial.*
+**Note: Terraform v0.12 support is highly experimental!**
 
 #### Example
 
@@ -43,3 +43,10 @@ Because of [this commit](https://github.com/stefansundin/terraform-provider-ssh/
 
 - Support another hop (ProxyJump-like behavior)
 - Note that the Windows binary is completely untested!
+
+#### Building
+
+```
+$ go get -u github.com/golang/protobuf/protoc-gen-go
+$ make
+```
