@@ -32,4 +32,20 @@ data "ssh_tunnel" "consul" {
     port = 8500
   }
 }
+
+provider "consul" {
+  address = data.ssh_tunnel.consul.local.0.address
+  scheme  = "http"
+}
+
+data "consul_keys" "keys" {
+  key {
+    name = "revision"
+    path = "secrets/api/password"
+  }
+}
+
+data "ssh_tunnel_close" "consul" {
+  depends_on = [data.consul_keys.keys]
+}
 ```
