@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"log"
+	"syscall"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
@@ -19,8 +20,10 @@ func dataSourceSSHTunnelCloseRead(ctx context.Context, d *schema.ResourceData, m
 	var diags diag.Diagnostics
 	providerManager := m.(*SSHProviderManager)
 	log.Printf("[DEBUG] Closing connections")
-	for _, listener := range providerManager.Listeners {
-		defer (*listener).Close()
+	for _, pid := range providerManager.TunnelProcessPIDs {
+		if err := syscall.Kill(pid, syscall.SIGSTOP); err != nil {
+			return diag.FromErr(err)
+		}
 	}
 	return diags
 }

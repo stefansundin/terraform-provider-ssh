@@ -4,11 +4,10 @@ import (
 	"context"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-	"net"
 )
 
 type SSHProviderManager struct {
-	Listeners []*net.Listener
+	TunnelProcessPIDs []int
 }
 
 func SSHProvider() *schema.Provider {

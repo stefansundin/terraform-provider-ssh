@@ -115,7 +115,7 @@ type SSHTunnel struct {
 	User   string
 }
 
-func (st *SSHTunnel) Start() (*net.Listener, error) {
+func (st *SSHTunnel) Run() error {
 	log.Println("[DEBUG] Creating SSH Tunnel")
 
 	sshConf := &ssh.ClientConfig{
@@ -126,7 +126,7 @@ func (st *SSHTunnel) Start() (*net.Listener, error) {
 	for _, auth := range st.Auth {
 		if auth.Enabled() {
 			if methods, err := auth.Authenticate(); err != nil {
-				return nil, err
+				return err
 			} else {
 				sshConf.Auth = append(sshConf.Auth, methods...)
 			}
@@ -140,7 +140,7 @@ func (st *SSHTunnel) Start() (*net.Listener, error) {
 
 	localListener, err := net.Listen(protocol, st.Local.String())
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	if st.Local.Socket == "" {
@@ -150,7 +150,7 @@ func (st *SSHTunnel) Start() (*net.Listener, error) {
 
 	sshClientConn, err := ssh.Dial("tcp", st.Server.String(), sshConf)
 	if err != nil {
-		return nil, fmt.Errorf("could not dial: %v", err)
+		return fmt.Errorf("could not dial: %v", err)
 	}
 
 	copyConn := func(writer, reader net.Conn) {
@@ -163,34 +163,32 @@ func (st *SSHTunnel) Start() (*net.Listener, error) {
 		}
 	}
 
-	go func() {
-		for {
-			localConn, err := localListener.Accept()
-			if err != nil {
-				if errors.Is(err, net.ErrClosed) {
-					log.Printf("Stopping connection loop")
-					break
-				}
-				log.Printf("error accepting connection: %s", err)
-				continue
+	for {
+		localConn, err := localListener.Accept()
+		if err != nil {
+			if errors.Is(err, net.ErrClosed) {
+				log.Printf("Stopping connection loop")
+				break
 			}
-
-			protocol = "tcp"
-
-			if st.Remote.Socket != "" {
-				protocol = "unix"
-			}
-
-			remoteConn, err := sshClientConn.Dial(protocol, st.Remote.String())
-			if err != nil {
-				log.Printf("error opening connection to %s: %s", st.Remote.Address(), err)
-				continue
-			}
-
-			go copyConn(localConn, remoteConn)
-			go copyConn(remoteConn, localConn)
+			log.Printf("error accepting connection: %s", err)
+			continue
 		}
-	}()
 
-	return &localListener, nil
+		protocol = "tcp"
+
+		if st.Remote.Socket != "" {
+			protocol = "unix"
+		}
+
+		remoteConn, err := sshClientConn.Dial(protocol, st.Remote.String())
+		if err != nil {
+			log.Printf("error opening connection to %s: %s", st.Remote.Address(), err)
+			continue
+		}
+
+		go copyConn(localConn, remoteConn)
+		go copyConn(remoteConn, localConn)
+	}
+
+	return nil
 }

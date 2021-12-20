@@ -2,8 +2,12 @@ package provider
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"os/user"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
@@ -261,11 +265,22 @@ func dataSourceSSHTunnelRead(ctx context.Context, d *schema.ResourceData, m inte
 		sshTunnel.Remote = expandEndpoint(v.([]interface{}))
 	}
 
-	listener, err := sshTunnel.Start()
+	serializedTunnel, err := json.Marshal(sshTunnel)
 	if err != nil {
 		return diag.FromErr(err)
 	}
-	providerManager.Listeners = append(providerManager.Listeners, listener)
+
+	cmd := exec.Command(os.Args[0])
+	cmd.Env = os.Environ()
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Env = append(cmd.Env, fmt.Sprintf("TF_SSH_PROVIDER_PARAMS=%s", base64.StdEncoding.EncodeToString(serializedTunnel)))
+	err = cmd.Start()
+	if err != nil {
+		return diag.FromErr(err)
+	}
+
+	providerManager.TunnelProcessPIDs = append(providerManager.TunnelProcessPIDs, cmd.Process.Pid)
 
 	log.Printf("[DEBUG] local port: %v", sshTunnel.Local.Port)
 	d.Set("local", flattenEndpoint(sshTunnel.Local))
