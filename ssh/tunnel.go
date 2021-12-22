@@ -88,10 +88,10 @@ func (pk SSHPrivateKey) Enabled() bool {
 func (pk SSHPrivateKey) Authenticate() (methods []ssh.AuthMethod, err error) {
 	var signer ssh.Signer
 	if pk.Password != "" {
-		log.Println("[DEBUG] using private key without password for authentication")
+		log.Println("[DEBUG] using private key with password for authentication")
 		signer, err = ssh.ParsePrivateKeyWithPassphrase([]byte(pk.PrivateKey), []byte(pk.Password))
 	} else {
-		log.Println("[DEBUG] using private key with password for authentication")
+		log.Println("[DEBUG] using private key without password for authentication")
 		signer, err = ssh.ParsePrivateKey([]byte(pk.PrivateKey))
 	}
 	if err != nil {

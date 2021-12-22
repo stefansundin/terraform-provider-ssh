@@ -7,6 +7,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
 	"github.com/stefansundin/terraform-provider-ssh/ssh"
+	"io"
 	"log"
 	"net"
 	"net/rpc"
@@ -283,18 +284,48 @@ func dataSourceSSHTunnelRead(ctx context.Context, d *schema.ResourceData, m inte
 
 	log.Printf("[DEBUG] starting RPC Server %s://%s monitoring ppid %d", proto, tunnelServerInbound.Addr().String(), os.Getppid())
 	cmd := exec.Command("sh", "-c", os.Args[0])
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Env = append(cmd.Env, fmt.Sprintf("TF_SSH_PROVIDER_TUNNEL_PROTO=%s", proto))
-	cmd.Env = append(cmd.Env, fmt.Sprintf("TF_SSH_PROVIDER_TUNNEL_ADDR=%s", tunnelServerInbound.Addr().String()))
-	cmd.Env = append(cmd.Env, fmt.Sprintf("TF_SSH_PROVIDER_TUNNEL_PPID=%d", os.Getppid()))
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return diag.FromErr(fmt.Errorf("Failed to get stdout of SSH Tunnel:\n%v", err))
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return diag.FromErr(fmt.Errorf("Failed to get stderr of SSH Tunnel:\n%v", err))
+	}
+	env := []string{
+		fmt.Sprintf("TF_SSH_PROVIDER_TUNNEL_PROTO=%s", proto),
+		fmt.Sprintf("TF_SSH_PROVIDER_TUNNEL_ADDR=%s", tunnelServerInbound.Addr().String()),
+		fmt.Sprintf("TF_SSH_PROVIDER_TUNNEL_PPID=%d", os.Getppid()),
+	}
+	cmd.Env = append(cmd.Env, env...)
 	err = cmd.Start()
 	if err != nil {
 		return diag.FromErr(err)
 	}
 
+	go io.Copy(os.Stdout, stdout)
+	go io.Copy(os.Stderr, stderr)
+
+	var commandError error
+	timer := time.NewTimer(30 * time.Second)
+	defer timer.Stop()
+
+	go func() {
+		if err := cmd.Wait(); err != nil {
+			commandError = err
+		}
+	}()
+
+	go func() {
+		<-timer.C
+		commandError = fmt.Errorf("Timed out during a tunnel setup")
+	}()
+
 	for !tunnelServer.Ready {
 		log.Printf("[DEBUG] waiting for local port availability")
+		if commandError != nil {
+			return diag.FromErr(commandError)
+		}
 		time.Sleep(1 * time.Second)
 	}
 
