@@ -1,10 +1,10 @@
 package main
 
 import (
-	"encoding/base64"
-	"encoding/json"
+	"flag"
 	"log"
 	"os"
+	"strconv"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/plugin"
@@ -19,17 +19,26 @@ func main() {
 				return provider.SSHProvider()
 			},
 		})
-	} else if _, ok := os.LookupEnv("TF_SSH_PROVIDER_PARAMS"); ok {
-		serializedParams, err := base64.StdEncoding.DecodeString(os.Getenv("TF_SSH_PROVIDER_PARAMS"))
-		if err != nil {
-			log.Fatalf("[ERROR] Failed to decode base64 params:\n%s", err)
+	} else {
+		var addr string
+		var ppid int
+		var proto string
+		var err error
+
+		flag.IntVar(&ppid, "ppid", 0, "parent process pid")
+		flag.StringVar(&addr, "addr", os.Getenv("TF_SSH_PROVIDER_TUNNEL_ADDR"), "set rpc server address")
+		flag.StringVar(&proto, "proto", os.Getenv("TF_SSH_PROVIDER_TUNNEL_PROTO"), "set rpc server protocol")
+		flag.Parse()
+		if ppid == 0 {
+			if ppid, err = strconv.Atoi(os.Getenv("TF_SSH_PROVIDER_TUNNEL_PPID")); err != nil {
+				log.Fatalf("[ERROR] Parent process pid wasn't set")
+			}
+		}
+		if addr == "" {
+			log.Fatalf("[ERROR] RPC server address wasn't set")
 		}
 		var sshTunnel ssh.SSHTunnel
-		if err = json.Unmarshal([]byte(serializedParams), &sshTunnel); err != nil {
-			log.Fatalf("[ERROR] Failed to parse json config:\n%s", err)
-		}
-
-		if err = sshTunnel.Run(); err != nil {
+		if err := sshTunnel.Run(proto, addr, ppid); err != nil {
 			log.Fatalf("[ERROR] Failed to start SSH Tunnel:\n%s", err)
 		}
 	}

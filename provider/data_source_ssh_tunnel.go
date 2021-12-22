@@ -2,18 +2,18 @@ package provider
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
-	"log"
-	"os"
-	"os/exec"
-	"os/user"
-
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
 	"github.com/stefansundin/terraform-provider-ssh/ssh"
+	"log"
+	"net"
+	"net/rpc"
+	"os"
+	"os/exec"
+	"os/user"
+	"time"
 )
 
 func dataSourceSSHTunnel() *schema.Resource {
@@ -211,7 +211,6 @@ func flattenEndpoint(endpoint ssh.Endpoint) []interface{} {
 
 func dataSourceSSHTunnelRead(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	var diags diag.Diagnostics
-	providerManager := m.(*SSHProviderManager)
 	sshTunnel := ssh.SSHTunnel{
 		User: d.Get("user").(string),
 	}
@@ -265,22 +264,41 @@ func dataSourceSSHTunnelRead(ctx context.Context, d *schema.ResourceData, m inte
 		sshTunnel.Remote = expandEndpoint(v.([]interface{}))
 	}
 
-	serializedTunnel, err := json.Marshal(sshTunnel)
+	proto := "tcp"
+	if sshTunnel.Local.Socket != "" {
+		proto = "unix"
+	}
+
+	tunnelServer := ssh.NewSSHTunnelServer(&sshTunnel)
+	tunnelServerInbound, err := net.Listen(proto, sshTunnel.Local.RandonPortString())
 	if err != nil {
 		return diag.FromErr(err)
 	}
 
-	cmd := exec.Command(os.Args[0])
-	cmd.Env = os.Environ()
+	if err = rpc.Register(tunnelServer); err != nil {
+		return diag.FromErr(err)
+	}
+
+	go rpc.Accept(tunnelServerInbound)
+
+	log.Printf("[DEBUG] starting RPC Server %s://%s monitoring ppid %d", proto, tunnelServerInbound.Addr().String(), os.Getppid())
+	cmd := exec.Command("sh", "-c", os.Args[0])
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	cmd.Env = append(cmd.Env, fmt.Sprintf("TF_SSH_PROVIDER_PARAMS=%s", base64.StdEncoding.EncodeToString(serializedTunnel)))
+	cmd.Env = append(cmd.Env, fmt.Sprintf("TF_SSH_PROVIDER_TUNNEL_PROTO=%s", proto))
+	cmd.Env = append(cmd.Env, fmt.Sprintf("TF_SSH_PROVIDER_TUNNEL_ADDR=%s", tunnelServerInbound.Addr().String()))
+	cmd.Env = append(cmd.Env, fmt.Sprintf("TF_SSH_PROVIDER_TUNNEL_PPID=%d", os.Getppid()))
 	err = cmd.Start()
 	if err != nil {
 		return diag.FromErr(err)
 	}
 
-	providerManager.TunnelProcessPIDs = append(providerManager.TunnelProcessPIDs, cmd.Process.Pid)
+	for !tunnelServer.Ready {
+		log.Printf("[DEBUG] waiting for local port availability")
+		time.Sleep(1 * time.Second)
+	}
+
+	tunnelServerInbound.Close()
 
 	log.Printf("[DEBUG] local port: %v", sshTunnel.Local.Port)
 	d.Set("local", flattenEndpoint(sshTunnel.Local))

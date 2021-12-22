@@ -1,13 +1,17 @@
 package ssh
 
 import (
+	"encoding/gob"
 	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net"
+	"net/rpc"
+	"os"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
@@ -31,6 +35,13 @@ func (e Endpoint) String() string {
 		return e.Socket
 	}
 	return fmt.Sprintf("%s:%d", e.Host, e.Port)
+}
+
+func (e Endpoint) RandonPortString() string {
+	if e.Socket != "" {
+		return e.Socket
+	}
+	return fmt.Sprintf("%s:0", e.Host)
 }
 
 type SSHAuthSock struct {
@@ -111,12 +122,26 @@ type SSHTunnel struct {
 	Local  Endpoint
 	Remote Endpoint
 	Server Endpoint
-	Auth   []SSHAuth
 	User   string
+	Auth   []SSHAuth
 }
 
-func (st *SSHTunnel) Run() error {
+func (st *SSHTunnel) Run(proto, serverAddress string, ppid int) error {
 	log.Println("[DEBUG] Creating SSH Tunnel")
+	var ack bool
+	gob.Register(SSHPrivateKey{})
+	gob.Register(SSHAuthSock{})
+	gob.Register(SSHPassword{})
+	client, err := rpc.Dial("tcp", serverAddress)
+	if err != nil {
+		log.Fatal("[ERROR] failed to connect to RPC server:\n", err)
+	}
+
+	defer client.Close()
+	err = client.Call("SSHTunnelServer.GetSSHTunnel", &ack, &st)
+	if err != nil {
+		log.Fatal("[ERROR] Failed to execute a RPC call:\n", err)
+	}
 
 	sshConf := &ssh.ClientConfig{
 		User:            st.User,
@@ -133,15 +158,12 @@ func (st *SSHTunnel) Run() error {
 		}
 	}
 
-	protocol := "tcp"
-	if st.Local.Socket != "" {
-		protocol = "unix"
-	}
-
-	localListener, err := net.Listen(protocol, st.Local.String())
+	localListener, err := net.Listen(proto, st.Local.String())
 	if err != nil {
 		return err
 	}
+
+	defer localListener.Close()
 
 	if st.Local.Socket == "" {
 		netParts := strings.Split(localListener.Addr().String(), ":")
@@ -152,6 +174,7 @@ func (st *SSHTunnel) Run() error {
 	if err != nil {
 		return fmt.Errorf("could not dial: %v", err)
 	}
+	defer sshClientConn.Close()
 
 	copyConn := func(writer, reader net.Conn) {
 		defer writer.Close()
@@ -162,6 +185,32 @@ func (st *SSHTunnel) Run() error {
 			fmt.Printf("io.Copy error: %s", err)
 		}
 	}
+
+	proto = "tcp"
+	if st.Remote.Socket != "" {
+		proto = "unix"
+	}
+
+	err = client.Call("SSHTunnelServer.PutSSHReady", st.Local.Port, &ack)
+	if err != nil {
+		log.Fatal("[ERROR] Failed to execute a RPC call:\n", err)
+	}
+
+	go func(pid int) {
+		for {
+			process, err := os.FindProcess(pid)
+			if err != nil {
+				log.Printf("Failed to find process. Closing server: %s\n", err)
+				localListener.Close()
+				return
+			}
+			if err := process.Signal(syscall.Signal(0)); err != nil {
+				log.Printf("Process %d is not alive anymore: %v\n", pid, err)
+				localListener.Close()
+				return
+			}
+		}
+	}(ppid)
 
 	for {
 		localConn, err := localListener.Accept()
@@ -174,13 +223,7 @@ func (st *SSHTunnel) Run() error {
 			continue
 		}
 
-		protocol = "tcp"
-
-		if st.Remote.Socket != "" {
-			protocol = "unix"
-		}
-
-		remoteConn, err := sshClientConn.Dial(protocol, st.Remote.String())
+		remoteConn, err := sshClientConn.Dial(proto, st.Remote.String())
 		if err != nil {
 			log.Printf("error opening connection to %s: %s", st.Remote.Address(), err)
 			continue
