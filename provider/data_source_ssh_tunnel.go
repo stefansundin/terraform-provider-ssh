@@ -1,15 +1,21 @@
 package provider
 
 import (
+	"bufio"
 	"context"
-	"log"
-	"os"
-	"os/user"
-
+	"fmt"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
 	"github.com/stefansundin/terraform-provider-ssh/ssh"
+	"io"
+	"log"
+	"net"
+	"net/rpc"
+	"os"
+	"os/exec"
+	"os/user"
+	"time"
 )
 
 func dataSourceSSHTunnel() *schema.Resource {
@@ -207,7 +213,6 @@ func flattenEndpoint(endpoint ssh.Endpoint) []interface{} {
 
 func dataSourceSSHTunnelRead(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	var diags diag.Diagnostics
-	providerManager := m.(*SSHProviderManager)
 	sshTunnel := ssh.SSHTunnel{
 		User: d.Get("user").(string),
 	}
@@ -261,13 +266,83 @@ func dataSourceSSHTunnelRead(ctx context.Context, d *schema.ResourceData, m inte
 		sshTunnel.Remote = expandEndpoint(v.([]interface{}))
 	}
 
-	listener, err := sshTunnel.Start()
+	proto := "tcp"
+	if sshTunnel.Local.Socket != "" {
+		proto = "unix"
+	}
+
+	tunnelServer := ssh.NewSSHTunnelServer(&sshTunnel)
+	tunnelServerInbound, err := net.Listen(proto, sshTunnel.Local.RandonPortString())
 	if err != nil {
 		return diag.FromErr(err)
 	}
-	providerManager.Listeners = append(providerManager.Listeners, listener)
 
-	log.Printf("[DEBUG] local port: %v", sshTunnel.Local.Port)
+	if err = rpc.Register(tunnelServer); err != nil {
+		return diag.FromErr(err)
+	}
+
+	go rpc.Accept(tunnelServerInbound)
+
+	log.Printf("[DEBUG] starting RPC Server %s://%s monitoring ppid %d", proto, tunnelServerInbound.Addr().String(), os.Getppid())
+	cmd := exec.Command("sh", "-c", os.Args[0])
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return diag.FromErr(fmt.Errorf("Failed to get stdout of SSH Tunnel:\n%v", err))
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return diag.FromErr(fmt.Errorf("Failed to get stderr of SSH Tunnel:\n%v", err))
+	}
+	env := []string{
+		fmt.Sprintf("TF_SSH_PROVIDER_TUNNEL_PROTO=%s", proto),
+		fmt.Sprintf("TF_SSH_PROVIDER_TUNNEL_ADDR=%s", tunnelServerInbound.Addr().String()),
+		fmt.Sprintf("TF_SSH_PROVIDER_TUNNEL_PPID=%d", os.Getppid()),
+	}
+	cmd.Env = append(cmd.Env, env...)
+	err = cmd.Start()
+	if err != nil {
+		return diag.FromErr(err)
+	}
+
+	redirectStd := func(std io.ReadCloser) {
+		in := bufio.NewScanner(std)
+		for in.Scan() {
+			log.Printf(in.Text())
+		}
+		if err := in.Err(); err != nil {
+			log.Printf("[ERROR] %s", err)
+		}
+	}
+
+	go redirectStd(stdout)
+	go redirectStd(stderr)
+
+	var commandError error
+	timer := time.NewTimer(30 * time.Second)
+	defer timer.Stop()
+
+	go func() {
+		if err := cmd.Wait(); err != nil {
+			commandError = err
+		}
+	}()
+
+	go func() {
+		<-timer.C
+		commandError = fmt.Errorf("Timed out during a tunnel setup")
+	}()
+
+	for !tunnelServer.Ready {
+		log.Printf("[DEBUG] Waiting for local port availability")
+		if commandError != nil {
+			return diag.FromErr(commandError)
+		}
+		time.Sleep(1 * time.Second)
+	}
+
+	tunnelServerInbound.Close()
+
+	log.Printf("[DEBUG] Local port: %v", sshTunnel.Local.Port)
 	d.Set("local", flattenEndpoint(sshTunnel.Local))
 	d.SetId(sshTunnel.Local.Address())
 

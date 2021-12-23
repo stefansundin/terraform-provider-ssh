@@ -42,10 +42,6 @@ data "consul_keys" "keys" {
     path = "secrets/api/password"
   }
 }
-
-data "ssh_tunnel_close" "consul" {
-  depends_on = [data.consul_keys.keys]
-}
 ```
 
 ## Argument Reference
