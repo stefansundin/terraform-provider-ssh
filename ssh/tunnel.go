@@ -88,10 +88,10 @@ func (pk SSHPrivateKey) Enabled() bool {
 func (pk SSHPrivateKey) Authenticate() (methods []ssh.AuthMethod, err error) {
 	var signer ssh.Signer
 	if pk.Password != "" {
-		log.Println("[DEBUG] using private key with password for authentication")
+		log.Println("[DEBUG] Using private key with password for authentication")
 		signer, err = ssh.ParsePrivateKeyWithPassphrase([]byte(pk.PrivateKey), []byte(pk.Password))
 	} else {
-		log.Println("[DEBUG] using private key without password for authentication")
+		log.Println("[DEBUG] Using private key without password for authentication")
 		signer, err = ssh.ParsePrivateKey([]byte(pk.PrivateKey))
 	}
 	if err != nil {
@@ -99,14 +99,14 @@ func (pk SSHPrivateKey) Authenticate() (methods []ssh.AuthMethod, err error) {
 	}
 	methods = append(methods, ssh.PublicKeys(signer))
 	if pk.Certificate != "" {
-		log.Println("[DEBUG] using client certificate for authentication")
+		log.Println("[DEBUG] Using client certificate for authentication")
 		pcert, _, _, _, err := ssh.ParseAuthorizedKey([]byte(pk.Certificate))
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse certificate %q: %s", pk.Certificate, err)
+			return nil, fmt.Errorf("Failed to parse certificate %q: %s", pk.Certificate, err)
 		}
 		certSigner, err := ssh.NewCertSigner(pcert.(*ssh.Certificate), signer)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create cert signer %q: %s", certSigner, err)
+			return nil, fmt.Errorf("Failed to create cert signer %q: %s", certSigner, err)
 		}
 		methods = append(methods, ssh.PublicKeys(certSigner))
 	}
@@ -134,7 +134,7 @@ func (st *SSHTunnel) Run(proto, serverAddress string, ppid int) error {
 	gob.Register(SSHPassword{})
 	client, err := rpc.Dial("tcp", serverAddress)
 	if err != nil {
-		log.Fatal("[ERROR] failed to connect to RPC server:\n", err)
+		log.Fatal("[ERROR] Failed to connect to RPC server:\n", err)
 	}
 
 	defer client.Close()

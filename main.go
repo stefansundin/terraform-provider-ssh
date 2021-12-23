@@ -25,6 +25,8 @@ func main() {
 		var proto string
 		var err error
 
+		log.SetFlags(0)
+
 		flag.IntVar(&ppid, "ppid", 0, "parent process pid")
 		flag.StringVar(&addr, "addr", os.Getenv("TF_SSH_PROVIDER_TUNNEL_ADDR"), "set rpc server address")
 		flag.StringVar(&proto, "proto", os.Getenv("TF_SSH_PROVIDER_TUNNEL_PROTO"), "set rpc server protocol")

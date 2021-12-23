@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
@@ -303,8 +304,18 @@ func dataSourceSSHTunnelRead(ctx context.Context, d *schema.ResourceData, m inte
 		return diag.FromErr(err)
 	}
 
-	go io.Copy(os.Stdout, stdout)
-	go io.Copy(os.Stderr, stderr)
+	redirectStd := func(std io.ReadCloser) {
+		in := bufio.NewScanner(std)
+		for in.Scan() {
+			log.Printf(in.Text())
+		}
+		if err := in.Err(); err != nil {
+			log.Printf("[ERROR] %s", err)
+		}
+	}
+
+	go redirectStd(stdout)
+	go redirectStd(stderr)
 
 	var commandError error
 	timer := time.NewTimer(30 * time.Second)
@@ -322,7 +333,7 @@ func dataSourceSSHTunnelRead(ctx context.Context, d *schema.ResourceData, m inte
 	}()
 
 	for !tunnelServer.Ready {
-		log.Printf("[DEBUG] waiting for local port availability")
+		log.Printf("[DEBUG] Waiting for local port availability")
 		if commandError != nil {
 			return diag.FromErr(commandError)
 		}
@@ -331,7 +342,7 @@ func dataSourceSSHTunnelRead(ctx context.Context, d *schema.ResourceData, m inte
 
 	tunnelServerInbound.Close()
 
-	log.Printf("[DEBUG] local port: %v", sshTunnel.Local.Port)
+	log.Printf("[DEBUG] Local port: %v", sshTunnel.Local.Port)
 	d.Set("local", flattenEndpoint(sshTunnel.Local))
 	d.SetId(sshTunnel.Local.Address())
 
