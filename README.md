@@ -5,7 +5,7 @@ bandaid [until it is supported in Terraform itself](https://github.com/hashicorp
 
 #### Example
 
-See [example/main.tf](main.tf).
+See [main.tf](example/main.tf).
 
 #### Installation
 
