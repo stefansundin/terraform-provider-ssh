@@ -4,10 +4,6 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
-	"github.com/stefansundin/terraform-provider-ssh/ssh"
 	"io"
 	"log"
 	"net"
@@ -16,13 +12,18 @@ import (
 	"os/exec"
 	"os/user"
 	"time"
+
+	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
+	"github.com/stefansundin/terraform-provider-ssh/ssh"
 )
 
 func dataSourceSSHTunnel() *schema.Resource {
 	return &schema.Resource{
 		ReadContext: dataSourceSSHTunnelRead,
 		Schema: map[string]*schema.Schema{
-			"user": &schema.Schema{
+			"user": {
 				Type:        schema.TypeString,
 				Optional:    true,
 				Description: "SSH connection username",
@@ -37,7 +38,7 @@ func dataSourceSSHTunnel() *schema.Resource {
 				MaxItems:    1,
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
-						"sock": &schema.Schema{
+						"sock": {
 							Type:        schema.TypeString,
 							Optional:    true,
 							Description: "Attempt to use the SSH agent (using the SSH_AUTH_SOCK environment variable)",
@@ -59,13 +60,13 @@ func dataSourceSSHTunnel() *schema.Resource {
 										Description: "The private SSH key",
 										Sensitive:   true,
 									},
-									"password": &schema.Schema{
+									"password": {
 										Type:        schema.TypeString,
 										Optional:    true,
 										Description: "The private SSH key password",
 										Sensitive:   true,
 									},
-									"certificate": &schema.Schema{
+									"certificate": {
 										Type:        schema.TypeString,
 										Optional:    true,
 										Description: "A signed SSH certificate",
@@ -74,7 +75,7 @@ func dataSourceSSHTunnel() *schema.Resource {
 								},
 							},
 						},
-						"password": &schema.Schema{
+						"password": {
 							Type:          schema.TypeString,
 							Optional:      true,
 							Description:   "The private SSH key password",
@@ -287,11 +288,11 @@ func dataSourceSSHTunnelRead(ctx context.Context, d *schema.ResourceData, m inte
 	cmd := exec.Command("sh", "-c", os.Args[0])
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return diag.FromErr(fmt.Errorf("Failed to get stdout of SSH Tunnel:\n%v", err))
+		return diag.FromErr(fmt.Errorf("failed to get stdout of SSH Tunnel:\n%v", err))
 	}
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
-		return diag.FromErr(fmt.Errorf("Failed to get stderr of SSH Tunnel:\n%v", err))
+		return diag.FromErr(fmt.Errorf("failed to get stderr of SSH Tunnel:\n%v", err))
 	}
 	env := []string{
 		fmt.Sprintf("TF_SSH_PROVIDER_TUNNEL_PROTO=%s", proto),
@@ -307,7 +308,7 @@ func dataSourceSSHTunnelRead(ctx context.Context, d *schema.ResourceData, m inte
 	redirectStd := func(std io.ReadCloser) {
 		in := bufio.NewScanner(std)
 		for in.Scan() {
-			log.Printf(in.Text())
+			log.Println(in.Text())
 		}
 		if err := in.Err(); err != nil {
 			log.Printf("[ERROR] %s", err)
@@ -329,11 +330,11 @@ func dataSourceSSHTunnelRead(ctx context.Context, d *schema.ResourceData, m inte
 
 	go func() {
 		<-timer.C
-		commandError = fmt.Errorf("Timed out during a tunnel setup")
+		commandError = fmt.Errorf("timed out during a tunnel setup")
 	}()
 
 	for !tunnelServer.Ready {
-		log.Printf("[DEBUG] Waiting for local port availability")
+		log.Printf("[DEBUG] waiting for local port availability")
 		if commandError != nil {
 			return diag.FromErr(commandError)
 		}
@@ -342,7 +343,7 @@ func dataSourceSSHTunnelRead(ctx context.Context, d *schema.ResourceData, m inte
 
 	tunnelServerInbound.Close()
 
-	log.Printf("[DEBUG] Local port: %v", sshTunnel.Local.Port)
+	log.Printf("[DEBUG] local port: %v", sshTunnel.Local.Port)
 	d.Set("local", flattenEndpoint(sshTunnel.Local))
 	d.SetId(sshTunnel.Local.Address())
 

@@ -88,25 +88,25 @@ func (pk SSHPrivateKey) Enabled() bool {
 func (pk SSHPrivateKey) Authenticate() (methods []ssh.AuthMethod, err error) {
 	var signer ssh.Signer
 	if pk.Password != "" {
-		log.Println("[DEBUG] Using private key with password for authentication")
+		log.Println("[DEBUG] using private key with password for authentication")
 		signer, err = ssh.ParsePrivateKeyWithPassphrase([]byte(pk.PrivateKey), []byte(pk.Password))
 	} else {
-		log.Println("[DEBUG] Using private key without password for authentication")
+		log.Println("[DEBUG] using private key without password for authentication")
 		signer, err = ssh.ParsePrivateKey([]byte(pk.PrivateKey))
 	}
 	if err != nil {
-		return nil, fmt.Errorf("Failed to parse private key:\n%v", err)
+		return nil, fmt.Errorf("failed to parse private key:\n%v", err)
 	}
 	methods = append(methods, ssh.PublicKeys(signer))
 	if pk.Certificate != "" {
-		log.Println("[DEBUG] Using client certificate for authentication")
+		log.Println("[DEBUG] using client certificate for authentication")
 		pcert, _, _, _, err := ssh.ParseAuthorizedKey([]byte(pk.Certificate))
 		if err != nil {
-			return nil, fmt.Errorf("Failed to parse certificate %q: %s", pk.Certificate, err)
+			return nil, fmt.Errorf("failed to parse certificate %q: %s", pk.Certificate, err)
 		}
 		certSigner, err := ssh.NewCertSigner(pcert.(*ssh.Certificate), signer)
 		if err != nil {
-			return nil, fmt.Errorf("Failed to create cert signer %q: %s", certSigner, err)
+			return nil, fmt.Errorf("failed to create cert signer %q: %s", certSigner, err)
 		}
 		methods = append(methods, ssh.PublicKeys(certSigner))
 	}
@@ -127,20 +127,20 @@ type SSHTunnel struct {
 }
 
 func (st *SSHTunnel) Run(proto, serverAddress string, ppid int) error {
-	log.Println("[DEBUG] Creating SSH Tunnel")
+	log.Println("[DEBUG] creating SSH Tunnel")
 	var ack bool
 	gob.Register(SSHPrivateKey{})
 	gob.Register(SSHAuthSock{})
 	gob.Register(SSHPassword{})
 	client, err := rpc.Dial("tcp", serverAddress)
 	if err != nil {
-		log.Fatal("[ERROR] Failed to connect to RPC server:\n", err)
+		log.Fatal("[ERROR] failed to connect to RPC server:\n", err)
 	}
 
 	defer client.Close()
 	err = client.Call("SSHTunnelServer.GetSSHTunnel", &ack, &st)
 	if err != nil {
-		log.Fatal("[ERROR] Failed to execute a RPC call:\n", err)
+		log.Fatal("[ERROR] failed to execute a RPC call:\n", err)
 	}
 
 	sshConf := &ssh.ClientConfig{
@@ -193,19 +193,19 @@ func (st *SSHTunnel) Run(proto, serverAddress string, ppid int) error {
 
 	err = client.Call("SSHTunnelServer.PutSSHReady", st.Local.Port, &ack)
 	if err != nil {
-		log.Fatal("[ERROR] Failed to execute a RPC call:\n", err)
+		log.Fatal("[ERROR] failed to execute a RPC call:\n", err)
 	}
 
 	go func(pid int) {
 		for {
 			process, err := os.FindProcess(pid)
 			if err != nil {
-				log.Printf("Failed to find process. Closing server: %s\n", err)
+				log.Printf("failed to find process. Closing server: %s\n", err)
 				localListener.Close()
 				return
 			}
 			if err := process.Signal(syscall.Signal(0)); err != nil {
-				log.Printf("Process %d is not alive anymore: %v\n", pid, err)
+				log.Printf("process %d is not alive anymore: %v\n", pid, err)
 				localListener.Close()
 				return
 			}
@@ -216,7 +216,7 @@ func (st *SSHTunnel) Run(proto, serverAddress string, ppid int) error {
 		localConn, err := localListener.Accept()
 		if err != nil {
 			if errors.Is(err, net.ErrClosed) {
-				log.Printf("Stopping connection loop")
+				log.Printf("stopping connection loop")
 				break
 			}
 			log.Printf("error accepting connection: %s", err)

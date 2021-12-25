@@ -33,7 +33,7 @@ func main() {
 		flag.Parse()
 		if ppid == 0 {
 			if ppid, err = strconv.Atoi(os.Getenv("TF_SSH_PROVIDER_TUNNEL_PPID")); err != nil {
-				log.Fatalf("[ERROR] Parent process pid wasn't set")
+				log.Fatalf("[ERROR] parent process pid wasn't set")
 			}
 		}
 		if addr == "" {
@@ -41,7 +41,7 @@ func main() {
 		}
 		var sshTunnel ssh.SSHTunnel
 		if err := sshTunnel.Run(proto, addr, ppid); err != nil {
-			log.Fatalf("[ERROR] Failed to start SSH Tunnel:\n%s", err)
+			log.Fatalf("[ERROR] failed to start SSH Tunnel:\n%s", err)
 		}
 	}
 }
