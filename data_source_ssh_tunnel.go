@@ -6,7 +6,7 @@ import (
 	"os/user"
 	"strings"
 
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/stefansundin/terraform-provider-ssh/pb"
 )
 
@@ -54,6 +54,11 @@ func dataSourceSSHTunnel() *schema.Resource {
 				Type:     schema.TypeString,
 				Computed: true,
 			},
+			"http_proxy": {
+				Type:        schema.TypeString,
+				Optional:    true,
+				Description: "http proxy address",
+			},
 			"tunnel_established": {
 				// Probably not the proper way to store this
 				Type:     schema.TypeBool,
@@ -81,6 +86,7 @@ func dataSourceSSHTunnelRead(d *schema.ResourceData, meta interface{}) error {
 	localAddress := d.Get("local_address").(string)
 	remoteAddress := d.Get("remote_address").(string)
 	sshAgent := d.Get("ssh_agent").(bool)
+	proxyAddress := d.Get("http_proxy").(string)
 	// default to port 22 if not specified
 	if !strings.Contains(host, ":") {
 		host = host + ":22"
@@ -115,6 +121,7 @@ func dataSourceSSHTunnelRead(d *schema.ResourceData, meta interface{}) error {
 			Certificate:   certificate,
 			LocalAddress:  localAddress,
 			RemoteAddress: remoteAddress,
+			ProxyAddress:  proxyAddress,
 		})
 		if err != nil {
 			return err
@@ -126,6 +133,11 @@ func dataSourceSSHTunnelRead(d *schema.ResourceData, meta interface{}) error {
 			d.Set("local_address", resp.EffectiveAddress)
 		}
 		d.Set("port", resp.Port)
+		//
+		//la := d.Get("local_address").(string)
+		//lc := strings.LastIndex(la, ":")
+		//d.Set("port", la[lc+1:len(la)])
+		//log.Printf("local address %v", la)
 
 	}
 	d.SetId(localAddress)

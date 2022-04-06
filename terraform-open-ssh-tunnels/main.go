@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/hashicorp/terraform/terraform"
+	"github.com/hashicorp/terraform-plugin-sdk/terraform"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 )
@@ -17,7 +17,7 @@ import (
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Printf("Usage: %s <plan>\n", os.Args[0])
-		fmt.Printf("Compiled with sources for Terraform %s\n", terraform.VersionString())
+		//fmt.Printf("Compiled with sources for Terraform %s\n", terraform.VersionString())
 		os.Exit(1)
 	}
 

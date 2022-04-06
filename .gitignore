@@ -1,13 +1,3 @@
-crash.log
-terraform-provider-*
-terraform.d
-.terraform
-*.tfstate
-*.tfstate.backup
-*.tfplan
-*.pb.go
+release/
+.idea
 terraform-open-ssh-tunnels/terraform-open-ssh-tunnels
-terraform-open-ssh-tunnels/terraform-open-ssh-tunnels.exe
-/terraform-open-ssh-tunnels_*
-/release
-/vendor

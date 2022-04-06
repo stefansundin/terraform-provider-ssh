@@ -1,4 +1,4 @@
-VERSION = v0.1.0
+VERSION = v0.2.0
 LDFLAGS = -ldflags '-s -w' -gcflags=-trimpath=${PWD} -asmflags=-trimpath=${PWD}
 GOARCH = amd64
 linux: export GOOS=linux
@@ -60,3 +60,7 @@ windows: pb
 clean:
 	rm -rf release
 	rm -f terraform-provider-ssh terraform-provider-ssh.exe terraform-open-ssh-tunnels/terraform-open-ssh-tunnels terraform-open-ssh-tunnels/terraform-open-ssh-tunnels.exe terraform-provider-ssh_${VERSION} terraform-provider-ssh_${VERSION}.exe pb/ssh_tunnel.pb.go
+
+install: darwin
+	mkdir -p ~/.terraform.d/plugins/darwin_amd64
+	cp terraform-provider-ssh_${VERSION} ~/.terraform.d/plugins/darwin_amd64
