@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
+	"runtime"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
@@ -285,7 +286,14 @@ func dataSourceSSHTunnelRead(ctx context.Context, d *schema.ResourceData, m inte
 	go rpc.Accept(tunnelServerInbound)
 
 	log.Printf("[DEBUG] starting RPC Server %s://%s monitoring ppid %d", proto, tunnelServerInbound.Addr().String(), os.Getppid())
-	cmd := exec.Command("sh", "-c", os.Args[0])
+	var cmdargs []string
+	if runtime.GOOS == "windows" {
+		cmdargs = []string{"cmd", "/C"}
+	} else {
+		cmdargs = []string{"/bin/sh", "-c"}
+	}
+	cmdargs = append(cmdargs, os.Args[0])
+	cmd := exec.Command(cmdargs[0], cmdargs[1:]...)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return diag.FromErr(fmt.Errorf("failed to get stdout of SSH Tunnel:\n%v", err))
