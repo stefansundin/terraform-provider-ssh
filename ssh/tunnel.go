@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/rpc"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -206,10 +207,12 @@ func (st *SSHTunnel) Run(proto, serverAddress string, ppid int) error {
 				localListener.Close()
 				return
 			}
-			if err := process.Signal(syscall.Signal(0)); err != nil {
-				log.Printf("process %d is not alive anymore: %v\n", pid, err)
-				localListener.Close()
-				return
+			if runtime.GOOS != "windows" {
+				if err := process.Signal(syscall.Signal(0)); err != nil {
+					log.Printf("process %d is not alive anymore: %v\n", pid, err)
+					localListener.Close()
+					return
+				}
 			}
 		}
 	}(ppid)
