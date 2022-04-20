@@ -134,13 +134,13 @@ func (st *SSHTunnel) Run(proto, serverAddress string, ppid int) error {
 	gob.Register(SSHPassword{})
 	client, err := rpc.Dial("tcp", serverAddress)
 	if err != nil {
-		log.Fatal("[ERROR] failed to connect to RPC server:\n", err)
+		log.Fatalf("[ERROR] failed to connect to RPC server: %v", err)
 	}
 
 	defer client.Close()
 	err = client.Call("SSHTunnelServer.GetSSHTunnel", &ack, &st)
 	if err != nil {
-		log.Fatal("[ERROR] failed to execute a RPC call:\n", err)
+		log.Fatalf("[ERROR] failed to execute a RPC call: %v", err)
 	}
 
 	sshConf := &ssh.ClientConfig{
@@ -160,6 +160,7 @@ func (st *SSHTunnel) Run(proto, serverAddress string, ppid int) error {
 
 	localListener, err := net.Listen(proto, st.Local.String())
 	if err != nil {
+		log.Fatal("[ERROR] failed to establish local tunnel port:\n", err)
 		return err
 	}
 
@@ -172,7 +173,8 @@ func (st *SSHTunnel) Run(proto, serverAddress string, ppid int) error {
 
 	sshClientConn, err := ssh.Dial("tcp", st.Server.String(), sshConf)
 	if err != nil {
-		return fmt.Errorf("could not dial: %v", err)
+		log.Fatalf("[ERROR] could not dial: %v", err)
+		return err
 	}
 	defer sshClientConn.Close()
 

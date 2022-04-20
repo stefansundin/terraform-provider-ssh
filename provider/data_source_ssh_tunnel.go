@@ -126,6 +126,12 @@ func dataSourceSSHTunnel() *schema.Resource {
 							Optional:      true,
 							Description:   "local socket",
 							ConflictsWith: []string{"local.0.host", "local.0.port"},
+							ValidateFunc: func(val interface{}, key string) (warns []string, errs []error) {
+								if val.(string) != "" && runtime.GOOS == "windows" {
+									errs = append(errs, fmt.Errorf("%q is not allowed to be set on windows", key))
+								}
+								return
+							},
 						},
 						"host": {
 							Type:          schema.TypeString,
@@ -162,6 +168,12 @@ func dataSourceSSHTunnel() *schema.Resource {
 							Optional:      true,
 							Description:   "remote socket",
 							ConflictsWith: []string{"remote.0.host", "remote.0.port"},
+							ValidateFunc: func(val interface{}, key string) (warns []string, errs []error) {
+								if val.(string) != "" && runtime.GOOS == "windows" {
+									errs = append(errs, fmt.Errorf("%q is not allowed to be set on windows", key))
+								}
+								return
+							},
 						},
 						"host": {
 							Type:          schema.TypeString,
@@ -225,12 +237,12 @@ func dataSourceSSHTunnelRead(ctx context.Context, d *schema.ResourceData, m inte
 		methodsData := v.([]interface{})
 		if len(methodsData) > 0 {
 			methods := methodsData[0].(map[string]interface{})
-			if v, ok := methods["sock"]; ok {
+			if v, ok := methods["sock"]; ok && runtime.GOOS != "windows" {
 				sshTunnel.Auth = append(sshTunnel.Auth, ssh.SSHAuthSock{
 					Path: v.(string),
 				})
 			}
-			if v, ok := methods["private_key"]; ok {
+			if v, ok := methods["private_key"]; ok && len(v.([]interface{})) > 0 {
 				pkData := v.([]interface{})
 				if len(pkData) > 0 {
 					privateKey := ssh.SSHPrivateKey{}
