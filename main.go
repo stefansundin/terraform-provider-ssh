@@ -4,7 +4,9 @@ import (
 	"flag"
 	"log"
 	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/plugin"
@@ -12,7 +14,24 @@ import (
 	"github.com/stefansundin/terraform-provider-ssh/ssh"
 )
 
+func logSignals() {
+	signals := make(chan os.Signal, 1)
+	for {
+		signal.Notify(signals, syscall.SIGHUP, syscall.SIGINT, syscall.SIGKILL, syscall.SIGTERM, syscall.SIGQUIT)
+		s := <-signals
+		log.Printf("pid=%d received signal %s", os.Getpid(), s)
+		signal.Reset()
+		currentProcess, err := os.FindProcess(os.Getpid())
+		if err != nil {
+			log.Fatalf("[ERROR] failed to find current process: %s", err)
+		}
+		currentProcess.Signal(s)
+	}
+}
+
 func main() {
+	log.Printf("[DEBUG] pid=%d in main", os.Getpid())
+	go logSignals()
 	if _, ok := os.LookupEnv(plugin.Handshake.MagicCookieKey); ok {
 		plugin.Serve(&plugin.ServeOpts{
 			ProviderFunc: func() *schema.Provider {

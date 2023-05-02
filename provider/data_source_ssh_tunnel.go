@@ -1,10 +1,8 @@
 package provider
 
 import (
-	"bufio"
 	"context"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"net/rpc"
@@ -306,14 +304,8 @@ func dataSourceSSHTunnelRead(ctx context.Context, d *schema.ResourceData, m inte
 	}
 	cmdargs = append(cmdargs, os.Args[0])
 	cmd := exec.Command(cmdargs[0], cmdargs[1:]...)
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return diag.FromErr(fmt.Errorf("failed to get stdout of SSH Tunnel:\n%v", err))
-	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		return diag.FromErr(fmt.Errorf("failed to get stderr of SSH Tunnel:\n%v", err))
-	}
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 	env := []string{
 		fmt.Sprintf("TF_SSH_PROVIDER_TUNNEL_PROTO=%s", proto),
 		fmt.Sprintf("TF_SSH_PROVIDER_TUNNEL_ADDR=%s", tunnelServerInbound.Addr().String()),
@@ -324,19 +316,6 @@ func dataSourceSSHTunnelRead(ctx context.Context, d *schema.ResourceData, m inte
 	if err != nil {
 		return diag.FromErr(err)
 	}
-
-	redirectStd := func(std io.ReadCloser) {
-		in := bufio.NewScanner(std)
-		for in.Scan() {
-			log.Println(in.Text())
-		}
-		if err := in.Err(); err != nil {
-			log.Printf("[ERROR] %s", err)
-		}
-	}
-
-	go redirectStd(stdout)
-	go redirectStd(stderr)
 
 	var commandError error
 	timer := time.NewTimer(30 * time.Second)

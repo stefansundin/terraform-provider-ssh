@@ -159,6 +159,7 @@ func (st *SSHTunnel) Run(proto, serverAddress string, ppid int) error {
 		}
 	}
 
+	log.Printf("[DEBUG] listening on %s address %s", proto, st.Local.Address())
 	localListener, err := net.Listen(proto, st.Local.String())
 	if err != nil {
 		log.Fatal("[ERROR] failed to establish local tunnel port:\n", err)
@@ -172,6 +173,7 @@ func (st *SSHTunnel) Run(proto, serverAddress string, ppid int) error {
 		st.Local.Port, _ = strconv.Atoi(netParts[1])
 	}
 
+	log.Printf("[DEBUG] connecting to ssh server %s", st.Server.Address())
 	sshClientConn, err := ssh.Dial("tcp", st.Server.String(), sshConf)
 	if err != nil {
 		log.Fatalf("[ERROR] could not dial: %v", err)
@@ -194,12 +196,14 @@ func (st *SSHTunnel) Run(proto, serverAddress string, ppid int) error {
 		proto = "unix"
 	}
 
+	log.Printf("[DEBUG] sending PutSSHReady RPC call with port %d", st.Local.Port)
 	err = client.Call("SSHTunnelServer.PutSSHReady", st.Local.Port, &ack)
 	if err != nil {
 		log.Fatal("[ERROR] failed to execute a RPC call:\n", err)
 	}
 
 	go func(pid int) {
+		log.Printf("[DEBUG] starting process watcher for pid %d", pid)
 		for {
 			process, err := os.FindProcess(pid)
 			if err != nil {
@@ -218,6 +222,7 @@ func (st *SSHTunnel) Run(proto, serverAddress string, ppid int) error {
 	}(ppid)
 
 	for {
+		log.Printf("[DEBUG] waiting for connection on %s", st.Local.Address())
 		localConn, err := localListener.Accept()
 		if err != nil {
 			if errors.Is(err, net.ErrClosed) {
@@ -228,15 +233,19 @@ func (st *SSHTunnel) Run(proto, serverAddress string, ppid int) error {
 			continue
 		}
 
+		log.Printf("[DEBUG] accepted connection from %s", localConn.RemoteAddr().String())
 		remoteConn, err := sshClientConn.Dial(proto, st.Remote.String())
 		if err != nil {
 			log.Printf("error opening connection to %s: %s", st.Remote.Address(), err)
 			continue
 		}
+		log.Printf("[DEBUG] opened connection to %s for %s", remoteConn.RemoteAddr().String(), localConn.RemoteAddr().String())
 
 		go copyConn(localConn, remoteConn)
 		go copyConn(remoteConn, localConn)
+		log.Printf("[DEBUG] connection forwarding setup finished")
 	}
 
+	log.Printf("[DEBUG] SSH Tunnel execution finished")
 	return nil
 }
