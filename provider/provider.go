@@ -175,11 +175,6 @@ func (p *SSHProvider) Configure(ctx context.Context, req provider.ConfigureReque
 	}
 
 	sshTunnel.Auth = []ssh.SSHAuth{}
-	if authSock != "" {
-		sshTunnel.Auth = append(sshTunnel.Auth, ssh.SSHAuthSock{
-			Path: authSock,
-		})
-	}
 	privateKey := ssh.SSHPrivateKey{}
 	if data.Auth.PrivateKey.Content.ValueString() != "" {
 		privateKey.PrivateKey = data.Auth.PrivateKey.Content.ValueString()
@@ -191,6 +186,11 @@ func (p *SSHProvider) Configure(ctx context.Context, req provider.ConfigureReque
 		privateKey.Certificate = data.Auth.PrivateKey.Certificate.ValueString()
 	}
 	sshTunnel.Auth = append(sshTunnel.Auth, privateKey)
+	if authSock != "" {
+		sshTunnel.Auth = append(sshTunnel.Auth, ssh.SSHAuthSock{
+			Path: authSock,
+		})
+	}
 	if data.Auth.Password.ValueString() != "" {
 		sshTunnel.Auth = append(sshTunnel.Auth, ssh.SSHPassword{
 			Password: data.Auth.Password.ValueString(),

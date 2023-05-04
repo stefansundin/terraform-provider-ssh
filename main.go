@@ -48,12 +48,14 @@ func main() {
 		var addr string
 		var ppid int
 		var proto string
+		var name string
 		var err error
 
 		log.SetFlags(0)
 
 		flag.IntVar(&ppid, "ppid", 0, "parent process pid")
 		flag.StringVar(&addr, "addr", os.Getenv("TF_SSH_PROVIDER_TUNNEL_ADDR"), "set rpc server address")
+		flag.StringVar(&name, "name", os.Getenv("TF_SSH_PROVIDER_TUNNEL_NAME"), "set rpc server name")
 		flag.StringVar(&proto, "proto", os.Getenv("TF_SSH_PROVIDER_TUNNEL_PROTO"), "set rpc server protocol")
 		flag.Parse()
 		if ppid == 0 {
@@ -65,7 +67,7 @@ func main() {
 			log.Fatalf("[ERROR] RPC server address wasn't set")
 		}
 		var sshTunnel ssh.SSHTunnel
-		if err := sshTunnel.Run(proto, addr, ppid); err != nil {
+		if err := sshTunnel.Run(proto, name, addr, ppid); err != nil {
 			log.Fatalf("[ERROR] failed to start SSH Tunnel:\n%s", err)
 		}
 	}

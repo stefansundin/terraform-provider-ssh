@@ -19,6 +19,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/mitchellh/hashstructure/v2"
 	"github.com/stefansundin/terraform-provider-ssh/ssh"
 )
 
@@ -193,22 +194,34 @@ func (d *SSHTunnelDataSource) Read(ctx context.Context, req datasource.ReadReque
 		data.Remote.Host = types.StringValue("localhost")
 	}
 
-	d.tunnel.Local = data.Local.ToEndpoint()
-	d.tunnel.Remote = data.Remote.ToEndpoint()
-
 	proto := "tcp"
-	if d.tunnel.Local.Socket != "" {
+	if data.Local.Socket.ValueString() != "" {
 		proto = "unix"
 	}
 
-	tunnelServer := ssh.NewSSHTunnelServer(d.tunnel)
-	tunnelServerInbound, err := net.Listen(proto, d.tunnel.Local.RandomPortString())
+	tunnel := &ssh.SSHTunnel{
+		User:   d.tunnel.User,
+		Auth:   d.tunnel.Auth,
+		Server: d.tunnel.Server,
+		Local:  data.Local.ToEndpoint(),
+		Remote: data.Remote.ToEndpoint(),
+	}
+
+	tunnelServer := ssh.NewSSHTunnelServer(tunnel)
+	tunnelServerInbound, err := net.Listen(proto, tunnel.Local.RandomPortString())
 	if err != nil {
 		resp.Diagnostics.AddError("proxy process error", err.Error())
 		return
 	}
 
-	if err = rpc.Register(tunnelServer); err != nil {
+	hash, err := hashstructure.Hash(tunnel.Remote, hashstructure.FormatV2, nil)
+	if err != nil {
+		resp.Diagnostics.AddError("rpc service name error", err.Error())
+	}
+
+	serviceName := fmt.Sprintf("SSHTunnelServer.%d", hash)
+
+	if err = rpc.RegisterName(serviceName, tunnelServer); err != nil {
 		resp.Diagnostics.AddError("rpc registration error", err.Error())
 		return
 	}
@@ -229,6 +242,7 @@ func (d *SSHTunnelDataSource) Read(ctx context.Context, req datasource.ReadReque
 	env := []string{
 		fmt.Sprintf("TF_SSH_PROVIDER_TUNNEL_PROTO=%s", proto),
 		fmt.Sprintf("TF_SSH_PROVIDER_TUNNEL_ADDR=%s", tunnelServerInbound.Addr().String()),
+		fmt.Sprintf("TF_SSH_PROVIDER_TUNNEL_NAME=%s", serviceName),
 		fmt.Sprintf("TF_SSH_PROVIDER_TUNNEL_PPID=%d", os.Getppid()),
 	}
 	cmd.Env = append(cmd.Env, env...)
@@ -264,10 +278,10 @@ func (d *SSHTunnelDataSource) Read(ctx context.Context, req datasource.ReadReque
 
 	tunnelServerInbound.Close()
 
-	log.Printf("[DEBUG] local port: %v", d.tunnel.Local.Port)
-	data.Local.Port = types.Int64Value(int64(d.tunnel.Local.Port))
-	data.Local.Address = types.StringValue(d.tunnel.Local.Address())
-	data.Id = types.StringValue(d.tunnel.Local.Address())
+	log.Printf("[DEBUG] local port: %v", tunnel.Local.Port)
+	data.Local.Port = types.Int64Value(int64(tunnel.Local.Port))
+	data.Local.Address = types.StringValue(tunnel.Local.Address())
+	data.Id = types.StringValue(tunnel.Local.Address())
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 
 	return

@@ -127,7 +127,7 @@ type SSHTunnel struct {
 	Auth   []SSHAuth
 }
 
-func (st *SSHTunnel) Run(proto, serverAddress string, ppid int) error {
+func (st *SSHTunnel) Run(proto, serverName, serverAddress string, ppid int) error {
 	log.Println("[DEBUG] creating SSH Tunnel")
 	var ack bool
 	gob.Register(SSHPrivateKey{})
@@ -139,7 +139,7 @@ func (st *SSHTunnel) Run(proto, serverAddress string, ppid int) error {
 	}
 
 	defer client.Close()
-	err = client.Call("SSHTunnelServer.GetSSHTunnel", &ack, &st)
+	err = client.Call(fmt.Sprintf("%s.GetSSHTunnel", serverName), &ack, &st)
 	if err != nil {
 		log.Fatalf("[ERROR] failed to execute a RPC call: %v", err)
 	}
@@ -197,7 +197,7 @@ func (st *SSHTunnel) Run(proto, serverAddress string, ppid int) error {
 	}
 
 	log.Printf("[DEBUG] sending PutSSHReady RPC call with port %d", st.Local.Port)
-	err = client.Call("SSHTunnelServer.PutSSHReady", st.Local.Port, &ack)
+	err = client.Call(fmt.Sprintf("%s.PutSSHReady", serverName), st.Local.Port, &ack)
 	if err != nil {
 		log.Fatal("[ERROR] failed to execute a RPC call:\n", err)
 	}

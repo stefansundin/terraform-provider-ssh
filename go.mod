@@ -12,6 +12,7 @@ require (
 	github.com/hashicorp/yamux v0.1.1 // indirect
 	github.com/jinzhu/copier v0.3.5
 	github.com/mattn/go-isatty v0.0.18 // indirect
+	github.com/mitchellh/hashstructure/v2 v2.0.2
 	github.com/oklog/run v1.1.0 // indirect
 	github.com/vmihailenco/msgpack v4.0.4+incompatible // indirect
 	golang.org/x/crypto v0.8.0
