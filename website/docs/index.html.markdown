@@ -60,8 +60,8 @@ The following arguments are supported:
 The following arguments are supported by the `auth` configuration block:
 
 * `sock` - (Optional) SSH Agent UNIX socket path.
-* `password` - (Optional) SSH server auth password. Conflicts with `auth.0.private_key`.
-* `private_key` - (Optional) Configuration block for SSH private key auth. Conflicts with `auth.0.password`. Detailed below.
+* `password` - (Optional) SSH server auth password. Conflicts with `auth.private_key`.
+* `private_key` - (Optional) Configuration block for SSH private key auth. Conflicts with `auth.password`. Detailed below.
 
 ### server Configuration Block
 

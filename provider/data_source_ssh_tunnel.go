@@ -237,8 +237,6 @@ func (d *SSHTunnelDataSource) Read(ctx context.Context, req datasource.ReadReque
 	}
 	cmdargs = append(cmdargs, os.Args[0])
 	cmd := exec.Command(cmdargs[0], cmdargs[1:]...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
 	env := []string{
 		fmt.Sprintf("TF_SSH_PROVIDER_TUNNEL_PROTO=%s", proto),
 		fmt.Sprintf("TF_SSH_PROVIDER_TUNNEL_ADDR=%s", tunnelServerInbound.Addr().String()),
