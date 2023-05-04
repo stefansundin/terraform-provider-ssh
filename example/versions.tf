@@ -1,7 +1,7 @@
 terraform {
   required_providers {
     ssh = {
-      source = "stephansundin/ssh"
+      source = "AndrewChubatiuk/ssh"
     }
     consul = {
       source  = "consul"

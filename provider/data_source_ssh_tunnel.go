@@ -8,190 +8,151 @@ import (
 	"net/rpc"
 	"os"
 	"os/exec"
-	"os/user"
 	"runtime"
 	"time"
 
-	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
+	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/objectvalidator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/datasource"
+	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/path"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/stefansundin/terraform-provider-ssh/ssh"
 )
 
-func dataSourceSSHTunnel() *schema.Resource {
-	return &schema.Resource{
-		ReadContext: dataSourceSSHTunnelRead,
-		Schema: map[string]*schema.Schema{
-			"user": {
-				Type:        schema.TypeString,
-				Optional:    true,
-				Description: "SSH connection username",
-				DefaultFunc: func() (interface{}, error) {
-					return user.Current()
-				},
+type SocketValidator struct{}
+
+func (v SocketValidator) Description(_ context.Context) string {
+	return "sockets are not supported on windows"
+}
+
+func (v SocketValidator) MarkdownDescription(_ context.Context) string {
+	return "sockets are not supported on windows"
+}
+
+func (v SocketValidator) ValidateString(ctx context.Context, req validator.StringRequest, resp *validator.StringResponse) {
+	if req.ConfigValue.IsNull() || req.ConfigValue.IsUnknown() {
+		return
+	}
+	if req.ConfigValue.ValueString() != "" && runtime.GOOS == "windows" {
+		resp.Diagnostics.AddAttributeError(
+			req.Path,
+			"socket validation error",
+			v.Description(ctx),
+		)
+	}
+}
+
+type SSHTunnelDataSourceModel struct {
+	Id     types.String   `tfsdk:"id"`
+	Remote *EndpointModel `tfsdk:"remote"`
+	Local  *EndpointModel `tfsdk:"local"`
+}
+
+type SSHTunnelDataSource struct {
+	tunnel *ssh.SSHTunnel
+}
+
+func NewSSHTunnelDataSource() datasource.DataSource {
+	return &SSHTunnelDataSource{}
+}
+
+func (d *SSHTunnelDataSource) Metadata(_ context.Context, _ datasource.MetadataRequest, resp *datasource.MetadataResponse) {
+	resp.TypeName = "ssh_tunnel"
+}
+
+func (d *SSHTunnelDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
+	resp.Schema = schema.Schema{
+		Attributes: map[string]schema.Attribute{
+			"id": schema.StringAttribute{
+				Computed:    true,
+				Description: "Tunnel identifier",
 			},
-			"auth": {
-				Type:        schema.TypeList,
-				Optional:    true,
-				Description: "SSH server auth",
-				MaxItems:    1,
-				Elem: &schema.Resource{
-					Schema: map[string]*schema.Schema{
-						"sock": {
-							Type:        schema.TypeString,
-							Optional:    true,
-							Description: "Attempt to use the SSH agent (using the SSH_AUTH_SOCK environment variable)",
-							DefaultFunc: func() (interface{}, error) {
-								return os.Getenv("SSH_AUTH_SOCK"), nil
-							},
-						},
-						"private_key": {
-							Type:          schema.TypeList,
-							Optional:      true,
-							Description:   "SSH server auth",
-							MaxItems:      1,
-							ConflictsWith: []string{"auth.0.password"},
-							Elem: &schema.Resource{
-								Schema: map[string]*schema.Schema{
-									"content": {
-										Type:        schema.TypeString,
-										Optional:    true,
-										Description: "The private SSH key",
-										Sensitive:   true,
-									},
-									"password": {
-										Type:        schema.TypeString,
-										Optional:    true,
-										Description: "The private SSH key password",
-										Sensitive:   true,
-									},
-									"certificate": {
-										Type:        schema.TypeString,
-										Optional:    true,
-										Description: "A signed SSH certificate",
-										Sensitive:   true,
-									},
-								},
-							},
-						},
-						"password": {
-							Type:          schema.TypeString,
-							Optional:      true,
-							Description:   "The private SSH key password",
-							Sensitive:     true,
-							ConflictsWith: []string{"auth.0.private_key"},
-						},
-					},
-				},
-			},
-			"server": {
-				Type:        schema.TypeList,
-				Required:    true,
-				Description: "SSH server address",
-				MaxItems:    1,
-				Elem: &schema.Resource{
-					Schema: map[string]*schema.Schema{
-						"host": {
-							Type:        schema.TypeString,
-							Required:    true,
-							Description: "SSH server host",
-						},
-						"port": {
-							Type:         schema.TypeInt,
-							Optional:     true,
-							Description:  "SSH server port",
-							Default:      22,
-							ValidateFunc: validation.IsPortNumber,
-						},
-						"address": {
-							Type:        schema.TypeString,
-							Computed:    true,
-							Description: "SSH server address",
-						},
-					},
-				},
-			},
-			"local": {
-				Type:        schema.TypeList,
-				Optional:    true,
-				Description: "Local bind address",
-				MaxItems:    1,
-				MinItems:    1,
-				Elem: &schema.Resource{
-					Schema: map[string]*schema.Schema{
-						"socket": {
-							Type:          schema.TypeString,
-							Optional:      true,
-							Description:   "local socket",
-							ConflictsWith: []string{"local.0.host", "local.0.port"},
-							ValidateFunc: func(val interface{}, key string) (warns []string, errs []error) {
-								if val.(string) != "" && runtime.GOOS == "windows" {
-									errs = append(errs, fmt.Errorf("%q is not allowed to be set on windows", key))
-								}
-								return
-							},
-						},
-						"host": {
-							Type:          schema.TypeString,
-							Optional:      true,
-							Default:       "localhost",
-							Description:   "local bind host",
-							ConflictsWith: []string{"local.0.socket"},
-						},
-						"port": {
-							Type:          schema.TypeInt,
-							Optional:      true,
-							Description:   "local bind port",
-							Default:       0,
-							ValidateFunc:  validation.IsPortNumber,
-							ConflictsWith: []string{"local.0.socket"},
-						},
-						"address": {
-							Type:        schema.TypeString,
-							Computed:    true,
-							Description: "local bind address",
-						},
-					},
-				},
-			},
-			"remote": {
-				Type:        schema.TypeList,
+			"remote": schema.SingleNestedAttribute{
 				Required:    true,
 				Description: "Remote bind address",
-				MaxItems:    1,
-				Elem: &schema.Resource{
-					Schema: map[string]*schema.Schema{
-						"socket": {
-							Type:          schema.TypeString,
-							Optional:      true,
-							Description:   "remote socket",
-							ConflictsWith: []string{"remote.0.host", "remote.0.port"},
-							ValidateFunc: func(val interface{}, key string) (warns []string, errs []error) {
-								if val.(string) != "" && runtime.GOOS == "windows" {
-									errs = append(errs, fmt.Errorf("%q is not allowed to be set on windows", key))
-								}
-								return
-							},
+				Validators: []validator.Object{
+					objectvalidator.AtLeastOneOf(
+						path.MatchRelative().AtName("socket"),
+						path.MatchRelative().AtName("port"),
+					),
+				},
+				Attributes: map[string]schema.Attribute{
+					"socket": schema.StringAttribute{
+						Optional:    true,
+						Description: "remote socket",
+						Validators: []validator.String{
+							SocketValidator{},
+							stringvalidator.ConflictsWith(
+								path.MatchRelative().AtParent().AtName("port"),
+								path.MatchRelative().AtParent().AtName("host"),
+							),
 						},
-						"host": {
-							Type:          schema.TypeString,
-							Optional:      true,
-							Default:       "localhost",
-							Description:   "remote bind host",
-							ConflictsWith: []string{"remote.0.socket"},
+					},
+					"host": schema.StringAttribute{
+						Optional:    true,
+						Description: "remote bind host",
+						Validators: []validator.String{
+							stringvalidator.ConflictsWith(
+								path.MatchRelative().AtParent().AtName("socket"),
+							),
 						},
-						"port": {
-							Type:          schema.TypeInt,
-							Optional:      true,
-							Description:   "remote bind port",
-							ValidateFunc:  validation.IsPortNumber,
-							ConflictsWith: []string{"remote.0.socket"},
+					},
+					"port": schema.Int64Attribute{
+						Optional:    true,
+						Description: "remote bind port",
+						Validators: []validator.Int64{
+							int64validator.Between(0, 65535),
+							int64validator.ConflictsWith(
+								path.MatchRelative().AtParent().AtName("socket"),
+							),
 						},
-						"address": {
-							Type:        schema.TypeString,
-							Computed:    true,
-							Description: "remote bind address",
+					},
+					"address": schema.StringAttribute{
+						Computed:    true,
+						Description: "remote bind address",
+					},
+				},
+			},
+			"local": schema.SingleNestedAttribute{
+				Optional:    true,
+				Description: "Local bind address",
+				Attributes: map[string]schema.Attribute{
+					"socket": schema.StringAttribute{
+						Optional:    true,
+						Description: "local socket",
+						Validators: []validator.String{
+							SocketValidator{},
+							stringvalidator.ConflictsWith(
+								path.MatchRelative().AtParent().AtName("port"),
+								path.MatchRelative().AtParent().AtName("host"),
+							),
 						},
+					},
+					"host": schema.StringAttribute{
+						Optional:    true,
+						Description: "local bind host",
+						Validators: []validator.String{
+							stringvalidator.ConflictsWith(
+								path.MatchRelative().AtParent().AtName("socket"),
+							),
+						},
+					},
+					"port": schema.Int64Attribute{
+						Optional:    true,
+						Description: "local bind port",
+						Validators: []validator.Int64{
+							int64validator.Between(0, 65535),
+							int64validator.ConflictsWith(
+								path.MatchRelative().AtParent().AtName("socket"),
+							),
+						},
+					},
+					"address": schema.StringAttribute{
+						Computed:    true,
+						Description: "local bind address",
 					},
 				},
 			},
@@ -199,98 +160,57 @@ func dataSourceSSHTunnel() *schema.Resource {
 	}
 }
 
-func expandEndpoint(m []interface{}) ssh.Endpoint {
-	endpoint := ssh.Endpoint{}
-	endpointData := m[0].(map[string]interface{})
-	if socket, ok := endpointData["socket"]; ok {
-		endpoint.Socket = socket.(string)
+func (d *SSHTunnelDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+	if req.ProviderData == nil {
+		return
 	}
-	if host, ok := endpointData["host"]; ok {
-		endpoint.Host = host.(string)
+	sshTunnel, ok := req.ProviderData.(*ssh.SSHTunnel)
+
+	if !ok {
+		resp.Diagnostics.AddError(
+			"Unexpected Resource Configure Type",
+			fmt.Sprintf("Expected *SSHProviderModel, got %T", req.ProviderData),
+		)
 	}
-	if port, ok := endpointData["port"]; ok {
-		endpoint.Port = port.(int)
-	}
-	return endpoint
+
+	d.tunnel = sshTunnel
 }
 
-func flattenEndpoint(endpoint ssh.Endpoint) []interface{} {
-	m := map[string]interface{}{}
-	m["host"] = endpoint.Host
-	m["port"] = endpoint.Port
-	m["socket"] = endpoint.Socket
-	m["address"] = endpoint.Address()
-	return []interface{}{m}
-}
-
-func dataSourceSSHTunnelRead(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
-	var diags diag.Diagnostics
-	sshTunnel := ssh.SSHTunnel{
-		User: d.Get("user").(string),
+func (d *SSHTunnelDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
+	var data SSHTunnelDataSourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
 	}
 
-	sshTunnel.Auth = []ssh.SSHAuth{}
-
-	if v, ok := d.GetOk("auth"); ok {
-		methodsData := v.([]interface{})
-		if len(methodsData) > 0 {
-			methods := methodsData[0].(map[string]interface{})
-			if v, ok := methods["sock"]; ok && runtime.GOOS != "windows" {
-				sshTunnel.Auth = append(sshTunnel.Auth, ssh.SSHAuthSock{
-					Path: v.(string),
-				})
-			}
-			if v, ok := methods["private_key"]; ok && len(v.([]interface{})) > 0 {
-				pkData := v.([]interface{})
-				if len(pkData) > 0 {
-					privateKey := ssh.SSHPrivateKey{}
-					pk := pkData[0].(map[string]interface{})
-					if content, ok := pk["content"]; ok {
-						privateKey.PrivateKey = content.(string)
-					}
-					if password, ok := pk["password"]; ok {
-						privateKey.Password = password.(string)
-					}
-					if certificate, ok := pk["certificate"]; ok {
-						privateKey.Certificate = certificate.(string)
-					}
-					sshTunnel.Auth = append(sshTunnel.Auth, privateKey)
-				}
-			} else if v, ok := methods["password"]; ok {
-				sshTunnel.Auth = append(sshTunnel.Auth, ssh.SSHPassword{
-					Password: v.(string),
-				})
-			}
-		}
+	if data.Local == nil {
+		data.Local = &EndpointModel{}
+	}
+	if data.Local.Host.ValueString() == "" {
+		data.Local.Host = types.StringValue("localhost")
+	}
+	if data.Remote.Host.ValueString() == "" {
+		data.Remote.Host = types.StringValue("localhost")
 	}
 
-	if v, ok := d.GetOk("server"); ok {
-		sshTunnel.Server = expandEndpoint(v.([]interface{}))
-	}
-
-	if v, ok := d.GetOk("local"); ok {
-		sshTunnel.Local = expandEndpoint(v.([]interface{}))
-	} else {
-		sshTunnel.Local = ssh.Endpoint{Host: "localhost"}
-	}
-
-	if v, ok := d.GetOk("remote"); ok {
-		sshTunnel.Remote = expandEndpoint(v.([]interface{}))
-	}
+	d.tunnel.Local = data.Local.ToEndpoint()
+	d.tunnel.Remote = data.Remote.ToEndpoint()
 
 	proto := "tcp"
-	if sshTunnel.Local.Socket != "" {
+	if d.tunnel.Local.Socket != "" {
 		proto = "unix"
 	}
 
-	tunnelServer := ssh.NewSSHTunnelServer(&sshTunnel)
-	tunnelServerInbound, err := net.Listen(proto, sshTunnel.Local.RandonPortString())
+	tunnelServer := ssh.NewSSHTunnelServer(d.tunnel)
+	tunnelServerInbound, err := net.Listen(proto, d.tunnel.Local.RandomPortString())
 	if err != nil {
-		return diag.FromErr(err)
+		resp.Diagnostics.AddError("proxy process error", err.Error())
+		return
 	}
 
 	if err = rpc.Register(tunnelServer); err != nil {
-		return diag.FromErr(err)
+		resp.Diagnostics.AddError("rpc registration error", err.Error())
+		return
 	}
 
 	go rpc.Accept(tunnelServerInbound)
@@ -314,7 +234,8 @@ func dataSourceSSHTunnelRead(ctx context.Context, d *schema.ResourceData, m inte
 	cmd.Env = append(cmd.Env, env...)
 	err = cmd.Start()
 	if err != nil {
-		return diag.FromErr(err)
+		resp.Diagnostics.AddError("proxy start error", err.Error())
+		return
 	}
 
 	var commandError error
@@ -335,16 +256,19 @@ func dataSourceSSHTunnelRead(ctx context.Context, d *schema.ResourceData, m inte
 	for !tunnelServer.Ready {
 		log.Printf("[DEBUG] waiting for local port availability")
 		if commandError != nil {
-			return diag.FromErr(commandError)
+			resp.Diagnostics.AddError("server proxy error", commandError.Error())
+			return
 		}
 		time.Sleep(1 * time.Second)
 	}
 
 	tunnelServerInbound.Close()
 
-	log.Printf("[DEBUG] local port: %v", sshTunnel.Local.Port)
-	d.Set("local", flattenEndpoint(sshTunnel.Local))
-	d.SetId(sshTunnel.Local.Address())
+	log.Printf("[DEBUG] local port: %v", d.tunnel.Local.Port)
+	data.Local.Port = types.Int64Value(int64(d.tunnel.Local.Port))
+	data.Local.Address = types.StringValue(d.tunnel.Local.Address())
+	data.Id = types.StringValue(d.tunnel.Local.Address())
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 
-	return diags
+	return
 }

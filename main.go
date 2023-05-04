@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log"
 	"os"
@@ -8,8 +9,7 @@ import (
 	"strconv"
 	"syscall"
 
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-	"github.com/hashicorp/terraform-plugin-sdk/v2/plugin"
+	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 	"github.com/stefansundin/terraform-provider-ssh/provider"
 	"github.com/stefansundin/terraform-provider-ssh/ssh"
 )
@@ -32,12 +32,18 @@ func logSignals() {
 func main() {
 	log.Printf("[DEBUG] pid=%d in main", os.Getpid())
 	go logSignals()
-	if _, ok := os.LookupEnv(plugin.Handshake.MagicCookieKey); ok {
-		plugin.Serve(&plugin.ServeOpts{
-			ProviderFunc: func() *schema.Provider {
-				return provider.SSHProvider()
-			},
+	if _, ok := os.LookupEnv("TF_PLUGIN_MAGIC_COOKIE"); ok {
+		var debug bool
+		log.SetFlags(0)
+		flag.BoolVar(&debug, "debug", false, "enable provider debug")
+		flag.Parse()
+		err := providerserver.Serve(context.Background(), provider.New(), providerserver.ServeOpts{
+			Address: "registry.terraform.io/AndrewChubatiuk/ssh",
+			Debug:   debug,
 		})
+		if err != nil {
+			log.Fatal(err.Error())
+		}
 	} else {
 		var addr string
 		var ppid int

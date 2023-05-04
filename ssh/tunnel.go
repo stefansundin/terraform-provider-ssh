@@ -38,7 +38,7 @@ func (e Endpoint) String() string {
 	return fmt.Sprintf("%s:%d", e.Host, e.Port)
 }
 
-func (e Endpoint) RandonPortString() string {
+func (e Endpoint) RandomPortString() string {
 	if e.Socket != "" {
 		return e.Socket
 	}
