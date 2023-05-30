@@ -1,0 +1,31 @@
+<% wrap_layout :inner do %>
+  <% content_for :sidebar do %>
+    <div class="docs-sidebar hidden-print affix-top" role="complementary">
+      <ul class="nav docs-sidenav">
+        <li<%= sidebar_current("docs-home") %>>
+          <a href="/docs/providers/index.html">All Providers</a>
+        </li>
+
+        <li<%= sidebar_current("docs-ssh-index") %>>
+          <a href="/docs/providers/ssh/index.html">SSH Provider</a>
+          <ul class="nav nav-visible">
+            <li<%= sidebar_current("docs-ssh-guide-getting-started") %>>
+              <a href="/docs/providers/ssh/guides/getting-started.html">Getting Started</a>
+            </li>
+          </ul>
+        </li>
+
+        <li<%= sidebar_current("docs-ssh-data-source") %>>
+          <a href="#">Data Sources</a>
+          <ul class="nav nav-visible">
+            <li<%= sidebar_current("docs-ssh-data-source-tunnel") %>>
+              <a href="/docs/providers/ssh/d/tunnel.html">ssh_tunnel</a>
+            </li>
+          </ul>
+        </li>
+      </ul>
+    </div>
+  <% end %>
+
+  <%= yield %>
+<% end %>
